@@ -1,0 +1,15 @@
+from rest_framework import serializers
+from .models import Result
+
+class ResultSerializer(serializers.ModelSerializer):
+    subject_code = serializers.CharField(source='subject.code', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    exam_session_name = serializers.CharField(source='exam_session.name', read_only=True)
+    credits = serializers.IntegerField(source='subject.credits', read_only=True)
+
+    class Meta:
+        model = Result
+        fields = [
+            'id', 'subject_code', 'subject_name', 'exam_session_name', 'credits',
+            'cie_marks', 'see_marks', 'total_marks', 'grade', 'published_at'
+        ]

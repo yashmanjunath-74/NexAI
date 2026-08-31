@@ -1,0 +1,1 @@
+"""NexAI - Eligibility App Init"""
