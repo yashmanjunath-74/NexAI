@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Plus, ArrowLeft, BookOpen } from 'lucide-react';
+import { ArrowLeft, BookOpen, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 import { SubjectList } from './components/SubjectList';
-import { CreateSubjectForm } from './components/CreateSubjectForm';
 import { SubjectEnrolment } from './components/SubjectEnrolment';
 
 export const CurriculumTab: React.FC = () => {
-  const [viewState, setViewState] = useState<'LIST' | 'CREATE' | 'VIEW_STUDENTS'>('LIST');
+  const [viewState, setViewState] = useState<'LIST' | 'VIEW_STUDENTS' | 'VIEW_COPO'>('LIST');
   const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
   const [selectedSubjectTitle, setSelectedSubjectTitle] = useState('');
 
@@ -19,12 +17,45 @@ export const CurriculumTab: React.FC = () => {
   };
 
   const handleCancel = () => setViewState('LIST');
-  const handleSave  = () => setViewState('LIST');
 
   const headerConfig = {
-    LIST:         { title: 'Curriculum Management', subtitle: 'Manage subjects and their outcome mappings.', action: <Button variant="outline-inverse" onClick={() => setViewState('CREATE')}><span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Plus size={16} /> Add New Subject</span></Button> },
-    CREATE:       { title: 'Create Subject',          subtitle: 'Design a new subject curriculum.',             action: <button onClick={handleCancel} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', fontWeight: 500 }}><ArrowLeft size={16} /> Back</button> },
-    VIEW_STUDENTS:{ title: `${selectedSubjectCode} — Enrolment`, subtitle: `Eligibility view for ${selectedSubjectTitle}`, action: <button onClick={handleCancel} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', fontWeight: 500 }}><ArrowLeft size={16} /> Back</button> },
+    LIST: {
+      title: 'Academic Curriculum & CO-PO Audit Gateway',
+      subtitle: 'Audit department-designed courses, syllabus modules, OBE matrices, and student exam eligibility.',
+      action: (
+        <div style={{
+          background: 'rgba(255,255,255,0.15)',
+          padding: '6px 14px',
+          borderRadius: '8px',
+          fontSize: '0.78rem',
+          color: 'white',
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}>
+          <ShieldCheck size={16} /> Course Creation Delegated to HOD
+        </div>
+      )
+    },
+    VIEW_STUDENTS: {
+      title: `${selectedSubjectCode} — Exam Eligibility & Enrolment`,
+      subtitle: `Audit attendance cutoff (≥75%) and CIE eligibility for ${selectedSubjectTitle}`,
+      action: (
+        <button onClick={handleCancel} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', fontWeight: 500 }}>
+          <ArrowLeft size={16} /> Back
+        </button>
+      )
+    },
+    VIEW_COPO: {
+      title: `${selectedSubjectCode} — CO-PO Mapping Audit`,
+      subtitle: `Program Outcomes correlation audit for ${selectedSubjectTitle}`,
+      action: (
+        <button onClick={handleCancel} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', fontWeight: 500 }}>
+          <ArrowLeft size={16} /> Back
+        </button>
+      )
+    }
   };
 
   const cfg = headerConfig[viewState];
@@ -84,7 +115,6 @@ export const CurriculumTab: React.FC = () => {
         />
 
         {viewState === 'LIST' && <SubjectList onViewStudents={handleViewStudents} />}
-        {viewState === 'CREATE' && <CreateSubjectForm onCancel={handleCancel} onSave={handleSave} />}
         {viewState === 'VIEW_STUDENTS' && <SubjectEnrolment subjectCode={selectedSubjectCode} subjectTitle={selectedSubjectTitle} />}
       </div>
     </div>

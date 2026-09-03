@@ -111,8 +111,23 @@ export const HallTicketPreviewModal: React.FC<HallTicketPreviewModalProps> = ({
               <h2 style={{ margin: '4px 0', fontSize: '1.35rem', fontWeight: 900, color: '#0f172a' }}>
                 OFFICIAL EXAMINATION ADMIT CARD / HALL TICKET
               </h2>
-              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#2563eb' }}>
-                {ticket.examSession}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
+                <span style={{
+                  background: ticket.examCycle === 'SEE_FINAL' ? '#DCFCE7' : ticket.examCycle === 'CIE-2' ? '#FEF3C7' : '#EEF2FF',
+                  color: ticket.examCycle === 'SEE_FINAL' ? '#15803D' : ticket.examCycle === 'CIE-2' ? '#B45309' : '#4338CA',
+                  fontWeight: 900,
+                  fontSize: '0.78rem',
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  border: `1.5px solid ${ticket.examCycle === 'SEE_FINAL' ? '#86EFAC' : ticket.examCycle === 'CIE-2' ? '#FDE68A' : '#C7D2FE'}`,
+                  letterSpacing: '0.5px',
+                  textTransform: 'uppercase'
+                }}>
+                  {ticket.examCycle ? `Evaluation: ${ticket.examCycle}` : 'Continuous Internal Evaluation (CIE-1)'}
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 700 }}>
+                  • {ticket.examSession}
+                </span>
               </div>
             </div>
 

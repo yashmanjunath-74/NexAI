@@ -18,7 +18,8 @@ def create_users():
         {"email": "invigilator@nexai.com", "password": "password123", "full_name": "Invigilator", "role": UserRole.INVIGILATOR},
         {"email": "evaluator@nexai.com", "password": "password123", "full_name": "Central Evaluator", "role": UserRole.EVALUATOR},
         {"email": "scrutinizer@nexai.com", "password": "password123", "full_name": "Central Scrutinizer", "role": UserRole.SCRUTINIZER},
-        {"email": "student@nexai.com", "password": "password123", "full_name": "Student", "role": UserRole.STUDENT},
+        {"email": "scanning@nexai.com", "password": "password123", "full_name": "Scanning Superintendent", "role": UserRole.SCANNING_OFFICER},
+        {"email": "faculty@nexai.com", "password": "password123", "full_name": "Prof. Alan Turing (Faculty)", "role": UserRole.FACULTY},
     ]
     
     for u in users:

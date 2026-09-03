@@ -8,6 +8,8 @@ interface Session {
   date: string;
   time: string;
   status: 'Pending Allocation' | 'Allocated';
+  examType: 'SEE (Semester End Examination)';
+  departments: string[];
   subjects: string[];
   totalStudents: number;
   rooms: number;
@@ -21,23 +23,39 @@ interface SessionListProps {
 const SESSIONS: Session[] = [
   {
     id: 'SESS_001',
-    name: 'Midterm Examinations — Fall 2026',
-    date: 'October 15, 2026',
-    time: '10:00 AM',
+    name: 'SEE Autumn 2026 — Core Sciences & Common Engineering (Semesters 1 & 3)',
+    date: 'December 12, 2026',
+    time: '09:30 AM – 12:30 PM',
     status: 'Pending Allocation',
-    subjects: ['CS101', 'CS201', 'MA101'],
-    totalStudents: 315,
+    examType: 'SEE (Semester End Examination)',
+    departments: ['CSE', 'ECE', 'ME', 'CV', 'AIML'],
+    subjects: ['CS101', 'EC101', 'ME101', 'MA101'],
+    totalStudents: 860,
     rooms: 0,
   },
   {
     id: 'SESS_002',
-    name: 'End Semester Finals — Fall 2026',
-    date: 'December 10, 2026',
-    time: '09:00 AM',
+    name: 'SEE Autumn 2026 — Professional Core & Departmental Majors (Semesters 5 & 7)',
+    date: 'December 18, 2026',
+    time: '02:00 PM – 05:00 PM',
     status: 'Allocated',
-    subjects: ['CS301', 'MA201', 'EC101'],
-    totalStudents: 345,
-    rooms: 4,
+    examType: 'SEE (Semester End Examination)',
+    departments: ['CSE', 'ECE', 'ME', 'CV'],
+    subjects: ['CS301', 'EC301', 'ME301', 'CV301'],
+    totalStudents: 740,
+    rooms: 12,
+  },
+  {
+    id: 'SESS_003',
+    name: 'SEE Spring 2027 — Institutional Main Examination Series (All Semesters)',
+    date: 'May 10, 2027',
+    time: '09:30 AM – 12:30 PM',
+    status: 'Pending Allocation',
+    examType: 'SEE (Semester End Examination)',
+    departments: ['CSE', 'ECE', 'ME', 'CV', 'ISE', 'AIML'],
+    subjects: ['CS401', 'EC401', 'ME401', 'CV401', 'AI401'],
+    totalStudents: 980,
+    rooms: 0,
   },
 ];
 
@@ -49,14 +67,50 @@ const statusMeta = {
 export const SessionList: React.FC<SessionListProps> = ({ onAllocate, onView }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* CoE Institutional Scope Banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%)',
+        border: '1.5px solid #C7D2FE',
+        borderRadius: '14px',
+        padding: '14px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '14px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '1.25rem' }}>🏛️</span>
+          <div>
+            <div style={{ fontWeight: 800, color: '#3730A3', fontSize: '0.85rem' }}>
+              CoE Institution-Wide Scope: Semester End Examinations (SEE) Across All Academic Departments
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#4F46E5', marginTop: '2px' }}>
+              CoE centrally coordinates SEE exam dates, interleaved multi-department seating allotments, and campus-wide halls. Continuous Internal Evaluations (CIE) are conducted independently by Department HODs.
+            </div>
+          </div>
+        </div>
+
+        <span style={{
+          background: '#4F46E5',
+          color: 'white',
+          fontSize: '0.72rem',
+          fontWeight: 800,
+          padding: '4px 10px',
+          borderRadius: '20px',
+          whiteSpace: 'nowrap'
+        }}>
+          ALL DEPARTMENTS ACTIVE
+        </span>
+      </div>
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: 40, height: 40, borderRadius: '10px', background: '#8b5cf615', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b5cf6' }}>
           <CalendarDays size={20} />
         </div>
         <div>
-          <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.05rem' }}>Upcoming Exam Sessions</h3>
-          <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>Select a session to allocate rooms and invigilators</p>
+          <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.05rem' }}>Upcoming SEE Institutional Sessions</h3>
+          <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>Select an institution-wide examination session to allocate rooms and invigilators</p>
         </div>
       </div>
 
@@ -130,25 +184,40 @@ export const SessionList: React.FC<SessionListProps> = ({ onAllocate, onView }) 
               alignItems: 'center',
               background: 'white',
             }}>
-              {/* Subject chips */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {/* Department & Subject chips */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748B' }}>DEPARTMENTS:</span>
+                {sess.departments.map(dept => (
+                  <span key={dept} style={{
+                    background: '#EEF2FF',
+                    color: '#4F46E5',
+                    border: '1px solid #C7D2FE',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: 900,
+                  }}>
+                    {dept}
+                  </span>
+                ))}
+                <span style={{ color: '#CBD5E1' }}>|</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748B' }}>SUBJECTS:</span>
                 {sess.subjects.map(code => (
                   <span key={code} style={{
                     background: `${meta.color}12`,
                     color: meta.color,
                     border: `1px solid ${meta.color}33`,
-                    padding: '3px 10px',
-                    borderRadius: '20px',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
                     fontSize: '0.72rem',
                     fontWeight: 700,
-                    letterSpacing: '0.3px',
                   }}>
                     {code}
                   </span>
                 ))}
                 {sess.rooms > 0 && (
-                  <span style={{ background: '#8b5cf612', color: '#8b5cf6', border: '1px solid #8b5cf633', padding: '3px 10px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700 }}>
-                    {sess.rooms} Rooms Assigned
+                  <span style={{ background: '#8b5cf612', color: '#8b5cf6', border: '1px solid #8b5cf633', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>
+                    {sess.rooms} Exam Halls Assigned
                   </span>
                 )}
               </div>

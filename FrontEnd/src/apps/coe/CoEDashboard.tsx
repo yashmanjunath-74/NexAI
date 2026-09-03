@@ -7,16 +7,17 @@ import { VaultTab } from './features/VaultTab';
 import { CurriculumTab } from './features/curriculum/CurriculumTab';
 import { ResourcesTab } from './features/resources/ResourcesTab';
 import { AllocationsTab } from './features/allocations/AllocationsTab';
+import { CredentialManagementTab } from './features/credentials/CredentialManagementTab';
 import { RadarTab } from './features/RadarTab';
 import { AuditTab } from './features/AuditTab';
-import { ShieldAlert, BookOpen, Building, CalendarDays, FileText } from 'lucide-react';
+import { ShieldAlert, BookOpen, Building, CalendarDays, FileText, KeyRound } from 'lucide-react';
 
-type Tab = 'VAULT' | 'CURRICULUM' | 'RESOURCES' | 'ALLOCATIONS' | 'RADAR' | 'AUDIT';
+type Tab = 'VAULT' | 'CURRICULUM' | 'RESOURCES' | 'ALLOCATIONS' | 'CREDENTIALS' | 'RADAR' | 'AUDIT';
 
 export default function CoEDashboard() {
   const user = useAuthStore(s => s.user);
   const logout = useAuthStore(s => s.logout);
-  const [activeTab, setActiveTab] = useState<Tab>('VAULT');
+  const [activeTab, setActiveTab] = useState<Tab>('ALLOCATIONS');
 
   // Dummy State mimicking API calls
   const [papers, setPapers] = useState<any[]>([]);
@@ -55,6 +56,8 @@ export default function CoEDashboard() {
         return <ResourcesTab />;
       case 'ALLOCATIONS':
         return <AllocationsTab />;
+      case 'CREDENTIALS':
+        return <CredentialManagementTab />;
       case 'RADAR':
         return <RadarTab data={radarData} loading={loading} error={error} />;
       case 'AUDIT':
@@ -65,10 +68,10 @@ export default function CoEDashboard() {
   };
 
   const sidebarItems = [
-
+    { id: 'ALLOCATIONS', label: 'SEE Allocations & Schedules', icon: <CalendarDays size={20} /> },
+    { id: 'CREDENTIALS', label: 'User Access & Credentials', icon: <KeyRound size={20} /> },
     { id: 'CURRICULUM', label: 'Curriculum', icon: <BookOpen size={20} /> },
     { id: 'RESOURCES', label: 'Resources', icon: <Building size={20} /> },
-    { id: 'ALLOCATIONS', label: 'Allocations', icon: <CalendarDays size={20} /> },
     { id: 'AUDIT', label: 'Audit Ledger', icon: <FileText size={20} /> },
     { id: 'VAULT', label: 'Secure Vault', icon: <ShieldAlert size={20} /> },
   ];

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { StudentEligibilityRecord, HallTicketRecord } from '../../../types';
-import { X, QrCode, Cpu } from 'lucide-react';
+import { StudentEligibilityRecord, HallTicketRecord, ExamCycleType } from '../../../types';
+import { X, QrCode, Cpu, ShieldCheck } from 'lucide-react';
 
 interface BatchGenerateModalProps {
   students: StudentEligibilityRecord[];
@@ -14,12 +14,23 @@ export const BatchGenerateModal: React.FC<BatchGenerateModalProps> = ({
   onClose,
 }) => {
   const [targetSemester, setTargetSemester] = useState<string>('ALL');
+  const [targetExamCycle, setTargetExamCycle] = useState<ExamCycleType>('CIE-1');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const eligibleCandidates = students.filter(s => {
-    const isEligible = s.status === 'ELIGIBLE' || (s.status === 'CONDONABLE' && s.condonationApproved);
-    if (!isEligible) return false;
+    // 1. Basic attendance clearance & fee clearance
+    const hasAttendanceClearance = s.status === 'ELIGIBLE' || (s.status === 'CONDONABLE' && s.condonationApproved);
+    if (!hasAttendanceClearance) return false;
+    if (s.status === 'FEE_BLOCKED') return false;
+
+    // 2. Semester filter
     if (targetSemester !== 'ALL' && s.semester !== targetSemester) return false;
+
+    // 3. For SEE Final Examination: Requires minimum passing CIE average of 20/50 (40%)
+    if (targetExamCycle === 'SEE_FINAL') {
+      if (s.cieMarksAvg < 20) return false;
+    }
+
     return true;
   });
 
@@ -29,18 +40,29 @@ export const BatchGenerateModal: React.FC<BatchGenerateModalProps> = ({
     setTimeout(() => {
       const generated: HallTicketRecord[] = eligibleCandidates.map((s, idx) => ({
         id: `ht_${Date.now()}_${idx}`,
-        ticketNumber: s.hallTicketNumber || `HT-FALL26-CS-${Math.floor(100 + Math.random() * 900)}`,
+        ticketNumber: `HT-${targetExamCycle}-FALL26-CS-${s.usn.slice(-3)}`,
         usn: s.usn,
         studentName: s.name,
         semester: `${s.semester} B.Tech`,
         department: 'Department of Computer Science & Engineering',
-        examSession: 'Fall End-Semester Examinations 2026',
+        examSession: targetExamCycle === 'SEE_FINAL'
+          ? 'Fall Semester End Examination (SEE) 2026'
+          : `Fall 2026 Continuous Internal Evaluation (${targetExamCycle})`,
+        examCycle: targetExamCycle,
         generatedAt: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }) + ' IST',
         isRevoked: false,
-        qrPayload: `NEXAI_ADMIT_VERIFIED_${s.usn}_SIGN_HOD_CSE_OK`,
-        slots: [
+        qrPayload: `NEXAI_ADMIT_${targetExamCycle}_VERIFIED_${s.usn}_SIGN_HOD_CSE_OK`,
+        slots: s.subjectCode ? [
+          {
+            subjectCode: s.subjectCode,
+            subjectTitle: s.subjectTitle || 'Course',
+            examDate: targetExamCycle === 'CIE-1' ? 'Oct 15, 2026' : targetExamCycle === 'CIE-2' ? 'Nov 12, 2026' : 'Dec 08, 2026',
+            examTime: '10:00 AM - 01:00 PM',
+            roomAllocated: 'Hall A-101',
+            deskNumber: `D-${idx + 1}`
+          }
+        ] : [
           { subjectCode: 'CS201', subjectTitle: 'Data Structures & Algorithms', examDate: 'Oct 15, 2026', examTime: '10:00 AM - 01:00 PM', roomAllocated: 'Hall A-101', deskNumber: `D-${idx + 1}` },
-          { subjectCode: 'MA201', subjectTitle: 'Discrete Mathematical Structures', examDate: 'Oct 18, 2026', examTime: '10:00 AM - 01:00 PM', roomAllocated: 'Hall A-101', deskNumber: `D-${idx + 1}` },
         ],
       }));
 
@@ -132,6 +154,64 @@ export const BatchGenerateModal: React.FC<BatchGenerateModalProps> = ({
 
         {/* Body */}
         <div style={{ padding: '26px 30px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          
+          {/* Target Examination / CIE Series Selection */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '8px' }}>
+              Select Examination / CIE Series for Hall Ticket Issuance:
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              {(['CIE-1', 'CIE-2', 'SEE_FINAL'] as const).map(cycle => (
+                <button
+                  key={cycle}
+                  type="button"
+                  onClick={() => setTargetExamCycle(cycle)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: targetExamCycle === cycle ? '2px solid #4F46E5' : '1.5px solid #E2E8F0',
+                    background: targetExamCycle === cycle ? '#EEF2FF' : '#F8FAFC',
+                    color: targetExamCycle === cycle ? '#4338CA' : '#475569',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>{cycle === 'SEE_FINAL' ? 'SEE Final' : cycle}</span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: targetExamCycle === cycle ? '#6366F1' : '#94A3B8' }}>
+                    {cycle === 'SEE_FINAL' ? 'Semester End Final' : cycle === 'CIE-1' ? 'Internal Test 1' : 'Internal Test 2'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Gateway Eligibility Rule for Selected CIE */}
+          <div style={{
+            background: targetExamCycle === 'SEE_FINAL' ? '#F0FDF4' : '#FFFBEB',
+            border: `1.5px solid ${targetExamCycle === 'SEE_FINAL' ? '#BBF7D0' : '#FDE68A'}`,
+            borderRadius: '10px',
+            padding: '10px 14px',
+            fontSize: '0.75rem',
+            color: targetExamCycle === 'SEE_FINAL' ? '#14532D' : '#92400E',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <ShieldCheck size={18} flex-shrink="0" />
+            <span>
+              <strong>Gate Rule for {targetExamCycle === 'SEE_FINAL' ? 'SEE Final Examination' : targetExamCycle}:</strong>{' '}
+              {targetExamCycle === 'SEE_FINAL'
+                ? 'Requires minimum 75% Attendance AND minimum 20/50 (40%) Cumulative CIE Average.'
+                : 'Requires minimum 75% Attendance (or approved condonation waiver) and cleared fee dues.'}
+            </span>
+          </div>
+
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
               Select Target Semester Cohort:
@@ -160,6 +240,38 @@ export const BatchGenerateModal: React.FC<BatchGenerateModalProps> = ({
             <span style={{ fontSize: '0.72rem', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '12px', fontWeight: 700 }}>
               Attendance & Fee Cleared ✓
             </span>
+          </div>
+
+          {/* Candidates Passing Gateway Preview */}
+          <div style={{
+            border: '1px solid #e2e8f0',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            maxHeight: '160px',
+            overflowY: 'auto'
+          }}>
+            <div style={{ background: '#f8fafc', padding: '8px 12px', fontSize: '0.72rem', fontWeight: 800, color: '#475569', borderBottom: '1px solid #e2e8f0' }}>
+              GATEWAY QUALIFIED CANDIDATES ROSTER ({eligibleCandidates.length})
+            </div>
+            {eligibleCandidates.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.75rem' }}>
+                No students qualify under the current semester criteria.
+              </div>
+            ) : (
+              eligibleCandidates.map(c => (
+                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '0.75rem' }}>
+                  <div>
+                    <strong style={{ fontFamily: 'monospace', color: '#1E293B' }}>{c.usn}</strong> - {c.name} ({c.semester})
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ color: '#16A34A', fontWeight: 700 }}>{c.attendancePercent}% Att.</span>
+                    <span style={{ background: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 800 }}>
+                      {c.condonationApproved ? 'CONDONED ✓' : 'CLEARED ✓'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <div style={{ background: '#eff6ff', padding: '14px', borderRadius: '10px', border: '1px solid #bfdbfe', fontSize: '0.75rem', color: '#1e40af', lineHeight: 1.5 }}>

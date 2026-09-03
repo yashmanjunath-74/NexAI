@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/exam_models.dart';
-import 'booklet_digitization_scanner.dart';
 
 class BookletScannerModal extends StatefulWidget {
   final List<StudentDeskItem> presentStudentsWithoutBooklet;
@@ -42,35 +41,10 @@ class _BookletScannerModalState extends State<BookletScannerModal> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.primaryDark, content: Text('✓ Ingested Booklet (Not Digitized)')),
+          SnackBar(backgroundColor: AppTheme.primaryDark, content: Text('✓ Tagged Booklet for Central Scanning Hub')),
         );
       }
     });
-  }
-
-  Future<void> _handleDigitizeBooklet() async {
-    if (_selectedStudent == null || _barcodeController.text.trim().isEmpty) return;
-
-    final dummyBarcode = 'ANON-${_selectedStudent!.courseCode}-${_barcodeController.text.replaceAll('BC-', '')}';
-
-    final result = await Navigator.push<int>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => BookletDigitizationScanner(
-          student: _selectedStudent!,
-          barcode: _barcodeController.text.trim(),
-          dummyBarcode: dummyBarcode,
-        ),
-      ),
-    );
-
-    if (result != null && result > 0 && mounted) {
-      widget.onBookletIngested(_selectedStudent!.usn, _barcodeController.text.trim(), dummyBarcode, result);
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: AppTheme.accentGreen, content: Text('✓ Digitized $result pages successfully!')),
-      );
-    }
   }
 
   @override
@@ -273,41 +247,43 @@ class _BookletScannerModalState extends State<BookletScannerModal> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  // Central Scanning Center Notice
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.hub, size: 18, color: AppTheme.primaryDark),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Physical booklets will be digitized at the Central Scanning Station using CoE Session Keys.',
+                            style: TextStyle(fontSize: 11, color: AppTheme.primaryDark, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                   // Submit Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: (_selectedStudent == null || _isIngesting) ? null : _handleConfirmQuickIngest,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.accentBlue,
-                            side: const BorderSide(color: AppTheme.accentBlue),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: const Text('Quick Collect Only', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                        ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: (_selectedStudent == null || _isIngesting) ? null : _handleConfirmQuickIngest,
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('Collect & Tag for Scanning Hub ✓', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: (_selectedStudent == null || _isIngesting) ? null : _handleDigitizeBooklet,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.accentGreen,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt, color: Colors.white, size: 16),
-                              SizedBox(width: 6),
-                              Text('Digitize Now', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),

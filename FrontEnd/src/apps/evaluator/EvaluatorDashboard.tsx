@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -6,8 +7,12 @@ import {
   Layers,
   PenTool,
   AlertTriangle,
-  Award
+  Award,
+  KeyRound,
+  CheckCircle2,
+  ArrowLeft
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 import {
   ValuationBundle,
@@ -30,6 +35,9 @@ type EvaluatorTab = 'WORKLIST' | 'STUDIO' | 'CHIEF_REVIEW' | 'LEDGER';
 export default function EvaluatorDashboard() {
   const user = useAuthStore(s => s.user);
   const logout = useAuthStore(s => s.logout);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionKey = searchParams.get('sessionKey');
 
   // Master State
   const [activeTab, setActiveTab] = useState<EvaluatorTab>('WORKLIST');
@@ -157,6 +165,70 @@ export default function EvaluatorDashboard() {
         </svg>
 
         <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Active Session Key Banner */}
+          {sessionKey && (
+            <div style={{
+              background: 'linear-gradient(90deg, #1E293B 0%, #0F172A 100%)',
+              color: 'white',
+              padding: '12px 20px',
+              borderRadius: '14px',
+              marginBottom: '20px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              boxShadow: '0 4px 14px rgba(15,23,42,0.15)',
+              border: '1px solid #334155',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  background: '#48977F',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <KeyRound size={20} color="white" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>SEE Valuation Session Key: <strong style={{ color: '#48977F' }}>{sessionKey}</strong></span>
+                    <span style={{ background: '#334155', padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', color: '#94A3B8' }}>
+                      Active • Evaluator: {user?.full_name || 'Faculty Evaluator'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                    Double-blind valuation mode. Completing evaluation batch seals marks and releases key.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  toast.success('Valuation batch completed! Session key terminated. Returning to Faculty Workspace...');
+                  navigate('/faculty');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'linear-gradient(135deg, #48977F 0%, #2F6852 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '9px 18px',
+                  borderRadius: '10px',
+                  fontSize: '0.82rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(72,151,127,0.3)',
+                }}
+              >
+                <CheckCircle2 size={16} /> Complete Evaluation Batch & Exit Session
+              </button>
+            </div>
+          )}
+
           {/* Page Header (Rendered when not in full studio mode) */}
           {activeTab !== 'STUDIO' && (
             <PageHeader

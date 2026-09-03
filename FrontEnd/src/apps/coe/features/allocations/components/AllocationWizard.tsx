@@ -1,129 +1,143 @@
 import React, { useState } from 'react';
-import { Card } from '@/components/ui/Card';
+import { WizardStepper } from './wizard/WizardStepper';
+import { Step1ScopeSchedule } from './wizard/steps/Step1ScopeSchedule';
+import { Step2SubjectMatrix } from './wizard/steps/Step2SubjectMatrix';
+import { Step3HallConfiguration } from './wizard/steps/Step3HallConfiguration';
+import { Step4InvigilatorRoster } from './wizard/steps/Step4InvigilatorRoster';
+import { Step5AIEngineConsole } from './wizard/steps/Step5AIEngineConsole';
 
-import { SubjectSelection } from './steps/SubjectSelection';
-import { RoomAllocation }   from './steps/RoomAllocation';
-import { InvigilatorAssignment } from './steps/InvigilatorAssignment';
-import { SeatingBlueprint } from './SeatingBlueprint';
+import {
+  SessionScopeConfig,
+  SubjectExam,
+  ExamHall,
+  FacultyInvigilator,
+  RoomAllocationResult,
+  AITelemetryMetrics,
+} from '../types/allocationTypes';
 
-interface Room {
-  id: string;
-  roomNumber: string;
-  building: string;
-  capacity: number;
-}
+import {
+  MOCK_TIME_SLOTS,
+  MOCK_ALL_SUBJECTS,
+  MOCK_EXAM_HALLS,
+  MOCK_FACULTY_ROSTER,
+} from '../mock/allocationMockData';
 
 interface AllocationWizardProps {
-  sessionId: string;
-  onComplete: () => void;
+  sessionId?: string;
+  onCompleteAllocation: (
+    results: RoomAllocationResult[],
+    telemetry: AITelemetryMetrics,
+    scope: SessionScopeConfig
+  ) => void;
+  onCancel: () => void;
 }
 
-const STEP_LABELS = ['Subjects', 'Rooms', 'Invigilators', 'Blueprint'];
-const STEP_COLORS = ['#48977f', '#3b82f6', '#8b5cf6', '#ed7245'];
+export const AllocationWizard: React.FC<AllocationWizardProps> = ({
+  onCompleteAllocation,
+  onCancel: _onCancel,
+}) => {
+  const [currentStep, setCurrentStep] = useState(1);
 
-export const AllocationWizard: React.FC<AllocationWizardProps> = ({ sessionId: _sessionId, onComplete }) => {
-  const [step, setStep] = useState(1);
+  // 1. Step 1: Scope & Schedule
+  const [scopeConfig, setScopeConfig] = useState<SessionScopeConfig>({
+    sessionName: 'SEE Autumn 2026 — Institutional Semester End Examination',
+    examType: 'SEE_REGULAR',
+    academicYear: '2026-27',
+    selectedDepartments: ['CSE', 'ECE', 'ME', 'CV', 'AIML'],
+    selectedSemesters: [3, 5],
+    examsPerDay: 1,
+    startDate: new Date().toISOString().split('T')[0],
+    selectedSlots: [MOCK_TIME_SLOTS[0]],
+  });
 
-  // Wizard state
-  const [selectedSubjects, setSelectedSubjects]             = useState<any[]>([]);
-  const [totalRequiredCapacity, setTotalRequiredCapacity]   = useState(0);
-  const [selectedRooms, setSelectedRooms]                   = useState<Room[]>([]);
-  const [assignments, setAssignments]                       = useState<Record<string, string>>({});
+  // 2. Step 2: Subjects & Candidate Headcount
+  const [selectedSubjects, setSelectedSubjects] = useState<SubjectExam[]>(
+    MOCK_ALL_SUBJECTS.filter(s =>
+      ['CS301', 'EC301', 'ME301', 'CV301', 'AI301'].includes(s.code)
+    )
+  );
 
-  const handleSubjectSelectionNext = (subjects: any[], capacity: number) => {
-    setSelectedSubjects(subjects);
-    setTotalRequiredCapacity(capacity);
-    setStep(2);
+  // 3. Step 3: Exam Halls
+  const [selectedRooms, setSelectedRooms] = useState<ExamHall[]>([
+    MOCK_EXAM_HALLS[0], // A-101 (60)
+    MOCK_EXAM_HALLS[1], // A-102 (40)
+    MOCK_EXAM_HALLS[2], // A-201 (50)
+    MOCK_EXAM_HALLS[3], // B-101 (60)
+    MOCK_EXAM_HALLS[4], // B-205 (40)
+  ]);
+
+  // 4. Step 4: Faculty Invigilators
+  const [facultyRoster, setFacultyRoster] = useState<FacultyInvigilator[]>(MOCK_FACULTY_ROSTER);
+
+  const handleScopeChange = (updated: Partial<SessionScopeConfig>) => {
+    setScopeConfig(prev => ({ ...prev, ...updated }));
   };
 
-  const handleRoomAllocationNext = (rooms: Room[]) => {
-    setSelectedRooms(rooms);
-    setStep(3);
+  const handleSolveComplete = (
+    results: RoomAllocationResult[],
+    telemetry: AITelemetryMetrics
+  ) => {
+    onCompleteAllocation(results, telemetry, scopeConfig);
   };
 
-  const handlePublish = (finalAssignments: Record<string, string>) => {
-    setAssignments(finalAssignments);
-    setStep(4);
-  };
+  const totalRequiredCandidates = selectedSubjects.reduce((sum, s) => sum + s.eligibleStudents, 0);
 
   return (
     <div>
-      {/* ── Step progress bar ── */}
-      {step < 4 && (
-        <Card variant="flat" style={{ padding: '16px 24px', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {STEP_LABELS.slice(0, 3).map((label, idx) => {
-              const num       = idx + 1;
-              const isDone    = step > num;
-              const isActive  = step === num;
-              const color     = STEP_COLORS[idx];
-              return (
-                <React.Fragment key={label}>
-                  {/* Step circle */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: '50%',
-                      background: isDone || isActive ? color : 'var(--color-border)',
-                      color: isDone || isActive ? 'white' : 'var(--color-text-secondary)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontWeight: 800, fontSize: '0.85rem', flexShrink: 0,
-                      transition: 'all 0.3s ease',
-                    }}>
-                      {isDone ? '✓' : num}
-                    </div>
-                    <span style={{
-                      fontWeight: isActive ? 700 : 500,
-                      fontSize: '0.85rem',
-                      color: isActive ? color : isDone ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {label}
-                    </span>
-                  </div>
-                  {/* Connector */}
-                  {idx < 2 && (
-                    <div style={{
-                      flex: 1, height: '3px', borderRadius: '2px', margin: '0 8px',
-                      background: step > num ? color : 'var(--color-border)',
-                      transition: 'background 0.4s ease',
-                    }} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </Card>
+      {/* Visual Stepper */}
+      <WizardStepper
+        currentStep={currentStep}
+        onStepClick={targetStep => {
+          if (targetStep < currentStep) setCurrentStep(targetStep);
+        }}
+      />
+
+      {/* Step Views */}
+      {currentStep === 1 && (
+        <Step1ScopeSchedule
+          config={scopeConfig}
+          onChange={handleScopeChange}
+          onNext={() => setCurrentStep(2)}
+        />
       )}
 
-      {/* ── Step content ── */}
-      {step === 1 && <SubjectSelection onNext={handleSubjectSelectionNext} />}
-
-      {step === 2 && (
-        <Card variant="flat" style={{ padding: '28px' }}>
-          <RoomAllocation
-            totalRequiredCapacity={totalRequiredCapacity}
-            onNext={handleRoomAllocationNext}
-            onBack={() => setStep(1)}
-          />
-        </Card>
+      {currentStep === 2 && (
+        <Step2SubjectMatrix
+          scopeConfig={scopeConfig}
+          selectedSubjects={selectedSubjects}
+          onSubjectsChange={setSelectedSubjects}
+          onNext={() => setCurrentStep(3)}
+          onBack={() => setCurrentStep(1)}
+        />
       )}
 
-      {step === 3 && (
-        <Card variant="flat" style={{ padding: '28px' }}>
-          <InvigilatorAssignment
-            selectedRooms={selectedRooms}
-            onBack={() => setStep(2)}
-            onPublish={handlePublish}
-          />
-        </Card>
+      {currentStep === 3 && (
+        <Step3HallConfiguration
+          requiredStudents={totalRequiredCandidates}
+          selectedRooms={selectedRooms}
+          onRoomsChange={setSelectedRooms}
+          onNext={() => setCurrentStep(4)}
+          onBack={() => setCurrentStep(2)}
+        />
       )}
 
-      {step === 4 && (
-        <SeatingBlueprint
+      {currentStep === 4 && (
+        <Step4InvigilatorRoster
+          selectedRooms={selectedRooms}
+          facultyRoster={facultyRoster}
+          onFacultyChange={setFacultyRoster}
+          onNext={() => setCurrentStep(5)}
+          onBack={() => setCurrentStep(3)}
+        />
+      )}
+
+      {currentStep === 5 && (
+        <Step5AIEngineConsole
           selectedSubjects={selectedSubjects}
           selectedRooms={selectedRooms}
-          assignments={assignments}
-          onReturn={onComplete}
+          facultyRoster={facultyRoster}
+          onBack={() => setCurrentStep(4)}
+          onSolveComplete={handleSolveComplete}
         />
       )}
     </div>

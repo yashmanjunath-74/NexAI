@@ -1,12 +1,14 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Avatar } from '../ui/Avatar';
+import { LogOut } from 'lucide-react';
 
 export interface SidebarItem {
   id: string;
   label: string;
   path?: string;
   icon?: React.ReactNode;
+  badge?: React.ReactNode;
 }
 
 interface SidebarProps {
@@ -19,8 +21,21 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ items, title = "NexAI", activeItemId, onItemClick, userName, userRole, onLogout }) => {
-  const getInitials = (name: string) => name.substring(0, 2).toUpperCase();
+export const Sidebar: React.FC<SidebarProps> = ({ items, title: _title = "NexAI", activeItemId, onItemClick, userName, userRole, onLogout }) => {
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const effectiveUserName = (!userName || userName.toLowerCase() === 'head of department' || userName.toLowerCase() === 'hod')
+    ? 'Dr. Grace Hopper'
+    : userName;
+
+  const effectiveRole = userRole || 'Head of Department (CSE)';
+
   return (
     <aside style={{
       width: '260px',
@@ -31,11 +46,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ items, title = "NexAI", active
       top: 0,
       display: 'flex',
       flexDirection: 'column',
-      padding: '32px 0',
+      padding: '24px 0 16px 0',
       zIndex: 10,
       borderTopRightRadius: '32px',
       borderBottomRightRadius: '32px',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      boxSizing: 'border-box'
     }}>
       {/* Rich Decorative Vector Background */}
       <div style={{
@@ -116,19 +132,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ items, title = "NexAI", active
         </svg>
       </div>
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
+      {/* Logo */}
       <div style={{ 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center',
-        marginBottom: userName ? '24px' : '48px',
+        marginBottom: '18px',
         color: 'white',
         position: 'relative',
         zIndex: 1,
-        padding: '0 32px'
+        padding: '0 28px',
+        flexShrink: 0
       }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100" width="180px" height="auto">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100" width="165px" height="auto">
           <defs>
             <linearGradient id="nexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#4F46E5" />
@@ -141,41 +159,55 @@ export const Sidebar: React.FC<SidebarProps> = ({ items, title = "NexAI", active
         </svg>
       </div>
 
-
-
-      {/* Navigation (Horizontal Text) */}
+      {/* Navigation (Scrollable Vertical Menu) */}
       <nav style={{ 
         display: 'flex', 
         flexDirection: 'column', 
-        gap: '12px',
-        flex: 1
+        gap: '4px',
+        flex: 1,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        padding: '4px 0 12px 0',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'rgba(255,255,255,0.2) transparent',
       }}>
         {items.map((item) => {
-          const isActive = activeItemId ? activeItemId === item.id : false; // We will handle route active states later if needed
+          const isActive = activeItemId ? activeItemId === item.id : false;
 
           const content = (
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              padding: '12px 32px',
+              padding: '10px 24px',
               color: 'var(--color-text-inverse)',
               transition: 'all var(--transition-fast)',
               position: 'relative',
-              opacity: isActive ? 1 : 0.6,
+              opacity: isActive ? 1 : 0.72,
               cursor: 'pointer',
-              background: isActive ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-              borderRight: isActive ? '4px solid white' : '4px solid transparent'
+              background: isActive ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+              borderRight: isActive ? '4px solid white' : '4px solid transparent',
+              borderTopRightRadius: isActive ? '0' : '8px',
+              borderBottomRightRadius: isActive ? '0' : '8px',
             }}
             onClick={() => onItemClick && onItemClick(item.id)}
             >
-              {item.icon && <span style={{ marginRight: '16px', fontSize: '1.2rem' }}>{item.icon}</span>}
+              {item.icon && <span style={{ marginRight: '14px', fontSize: '1.1rem', display: 'flex', alignItems: 'center' }}>{item.icon}</span>}
               <span style={{
-                fontSize: '1rem',
-                fontWeight: isActive ? 600 : 400,
-                letterSpacing: '0.5px'
+                fontSize: '0.88rem',
+                fontWeight: isActive ? 700 : 500,
+                letterSpacing: '0.2px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                flex: 1,
               }}>
                 {item.label}
               </span>
+              {item.badge && (
+                <span style={{ marginLeft: '8px', display: 'inline-flex', alignItems: 'center' }}>
+                  {item.badge}
+                </span>
+              )}
             </div>
           );
 
@@ -199,18 +231,37 @@ export const Sidebar: React.FC<SidebarProps> = ({ items, title = "NexAI", active
         })}
       </nav>
 
-      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', padding: '0 32px 32px 32px' }}>
-        {userName && (
+      {/* User Profile & Logout Bottom Section */}
+      <div style={{
+        marginTop: 'auto',
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        padding: '12px 20px 8px 20px',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        background: 'rgba(0, 0, 0, 0.12)',
+        backdropFilter: 'blur(8px)',
+      }}>
+        {effectiveUserName && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: '10px',
             color: 'white',
+            background: 'rgba(255,255,255,0.06)',
+            padding: '8px 12px',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.1)',
           }}>
-            <Avatar initials={getInitials(userName)} size={36} bgColor="rgba(255,255,255,0.2)" color="white" />
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{userName}</span>
-              <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{userRole}</span>
+            <Avatar initials={getInitials(effectiveUserName)} size={34} bgColor="rgba(255,255,255,0.2)" color="white" />
+            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {effectiveUserName}
+              </span>
+              <span style={{ fontSize: '0.7rem', opacity: 0.85, color: '#A5B4FC', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {effectiveRole}
+              </span>
             </div>
           </div>
         )}
@@ -219,22 +270,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ items, title = "NexAI", active
           <button 
             onClick={onLogout}
             style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.15)',
               cursor: 'pointer',
               color: 'white',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-md)',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              padding: '7px 14px',
+              borderRadius: '8px',
               width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
               transition: 'all 0.2s ease'
             }}
           >
-            Log out
+            <LogOut size={14} /> Log out
           </button>
         )}
       </div>
+
       </div>
     </aside>
   );

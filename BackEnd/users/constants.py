@@ -9,6 +9,8 @@ class UserRole:
     EVALUATOR = "EVALUATOR"
     SCRUTINIZER = "SCRUTINIZER"
     STUDENT = "STUDENT"
+    SCANNING_OFFICER = "SCANNING_OFFICER"
+    FACULTY = "FACULTY"
 
     CHOICES = [
         (CHIEF_SUPERINTENDENT, "Chief Superintendent / CoE"),
@@ -18,4 +20,6 @@ class UserRole:
         (EVALUATOR, "Faculty Evaluator"),
         (SCRUTINIZER, "Scrutinizer"),
         (STUDENT, "Student"),
+        (SCANNING_OFFICER, "Scanning Center Superintendent"),
+        (FACULTY, "Faculty / Course Teacher"),
     ]
