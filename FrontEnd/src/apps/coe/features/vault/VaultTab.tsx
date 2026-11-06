@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '@/services/api';
+import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -29,10 +31,106 @@ export interface VaultTabProps {
 
 export const VaultTab: React.FC<VaultTabProps> = () => {
   // State
-  const [subjects, setSubjects] = useState<VaultSubject[]>(INITIAL_SUBJECTS);
-  const [papersList, setPapersList] = useState<QuestionPaperSet[]>(INITIAL_PAPERS);
-  const [sessionKeys, setSessionKeys] = useState<Record<string, SessionKeyData>>(MOCK_SESSION_KEYS);
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('CS201');
+  const [subjects, setSubjects] = useState<VaultSubject[]>([]);
+  const [papersList, setPapersList] = useState<QuestionPaperSet[]>([]);
+  const [sessionKeys, setSessionKeys] = useState<Record<string, SessionKeyData>>({});
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
+
+  useEffect(() => {
+    const fetchVaultData = async () => {
+      try {
+        const res = await api.get('/vault/question-papers/');
+        const papers = res.data.results || res.data;
+        
+        // Group by subject to build VaultSubjects
+        const subjectsMap: Record<string, VaultSubject> = {};
+        const mappedPapers: QuestionPaperSet[] = [];
+        const mappedKeys: Record<string, SessionKeyData> = {};
+
+        papers.forEach((p: any, index: number) => {
+          const subCode = p.subject_code;
+          if (!subjectsMap[subCode]) {
+            subjectsMap[subCode] = {
+              code: subCode,
+              title: p.title.replace(' Official Paper', ''),
+              department: 'General', // Would come from subject API normally
+              examDate: p.exam_session_name || '2026-09-18', // Placeholder
+              examSlot: '09:00 AM - 12:00 PM',
+              setsAvailable: 0,
+              requiredSets: 3,
+              vaultStatus: 'LOCKED'
+            };
+          }
+
+          // Map paper
+          const isVaulted = ['SUBMITTED', 'APPROVED', 'ENCRYPTED', 'DISTRIBUTED'].includes(p.status);
+          if (isVaulted) {
+             subjectsMap[subCode].setsAvailable += 1;
+          }
+
+          mappedPapers.push({
+            id: p.id,
+            setLabel: ['Set A', 'Set B', 'Set C', 'Set D'][index % 4] as any,
+            title: p.title,
+            subjectCode: subCode,
+            subjectTitle: subjectsMap[subCode].title,
+            examSession: p.exam_session_name || 'Session',
+            semester: 'Fall',
+            setterName: 'Faculty',
+            setterDepartment: 'General',
+            status: isVaulted ? 'VAULTED' : 'DRAFT' as any,
+            ipfsCid: p.ipfs_cid || 'pending...',
+            sha256Hash: 'pending...',
+            submittedAt: p.updated_at,
+            difficulty: p.difficulty_level || 'Balanced',
+            aiQualityScore: 98,
+            similarityScore: 0,
+            totalMarks: p.total_marks || 100,
+            durationMinutes: p.duration_mins || 180,
+            questionsCount: p.questions ? p.questions.length : 0,
+                        questions: (p.questions || []).map((q: any) => ({
+              id: q.id,
+              number: q.question_number,
+              part: q.part || '',
+              section: q.section || 'Part A',
+              text: q.text_content,
+              marks: q.marks,
+              bloomsLevel: q.bloom_level === 'REMEMBER' ? 'Remember' : q.bloom_level === 'UNDERSTAND' ? 'Understand' : q.bloom_level === 'APPLY' ? 'Apply' : q.bloom_level === 'ANALYZE' ? 'Analyze' : q.bloom_level === 'EVALUATE' ? 'Evaluate' : 'Create',
+              coMapping: q.co_mapping || 'CO1',
+              unitMapping: q.unit_mapping || 'Unit 1'
+            })),
+            isDecrypted: false
+          });
+
+          // Generate dummy session key data for visual parity with DB status
+          if (!mappedKeys[subCode] && isVaulted) {
+             mappedKeys[subCode] = {
+                keyId: `KEY-${subCode}-9999`,
+                subjectCode: subCode,
+                algorithm: 'AES-256-GCM + CRYSTALS-Dilithium3',
+                generatedAt: p.updated_at,
+                expiresAt: 'Future',
+                unlockTimestamp: p.key_unlock_timestamp || 'Not set',
+                thresholdQuorum: { required: 2, total: 3, signed: [] },
+                keyFingerprint: 'A1:B2:C3...',
+                isUnlocked: false
+             };
+          }
+        });
+
+        const subjectList = Object.values(subjectsMap);
+        setSubjects(subjectList);
+        setPapersList(mappedPapers);
+        setSessionKeys(mappedKeys);
+        if (subjectList.length > 0) {
+          setSelectedSubjectCode(subjectList[0].code);
+        }
+      } catch (e) {
+        toast.error('Failed to load Vault data');
+      }
+    };
+    fetchVaultData();
+  }, []);
 
   // Modals & Views
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
@@ -306,10 +404,10 @@ export const VaultTab: React.FC<VaultTabProps> = () => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
-                  {currentSubject.code} — {currentSubject.title}
+                  {currentSubject?.code} — {currentSubject?.title}
                 </h3>
-                <Badge variant={currentSubject.vaultStatus === 'UNSEALED' ? 'success' : currentKey ? 'info' : 'warning'}>
-                  {currentSubject.vaultStatus === 'UNSEALED'
+                <Badge variant={currentSubject?.vaultStatus === 'UNSEALED' ? 'success' : currentKey ? 'info' : 'warning'}>
+                  {currentSubject?.vaultStatus === 'UNSEALED'
                     ? 'UNSEALED & ACTIVE'
                     : currentKey
                     ? 'SESSION KEY ACTIVE'
@@ -318,7 +416,7 @@ export const VaultTab: React.FC<VaultTabProps> = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '18px', marginTop: '6px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                <span>Exam: <strong>{currentSubject.examDate}</strong> ({currentSubject.examSlot})</span>
+                <span>Exam: <strong>{currentSubject?.examDate}</strong> ({currentSubject?.examSlot})</span>
                 <span>•</span>
                 <span>Cipher: <strong style={{ color: currentKey ? '#38bdf8' : '#f59e0b' }}>{currentKey ? currentKey.algorithm.split(' + ')[0] : 'Not Armed'}</strong></span>
                 {currentKey && (
@@ -432,7 +530,7 @@ export const VaultTab: React.FC<VaultTabProps> = () => {
               <PaperCard
                 key={paper.id}
                 paper={paper}
-                isSelectedForExam={currentSubject.activeSelectedSetId === paper.id}
+                isSelectedForExam={currentSubject?.activeSelectedSetId === paper.id}
                 onInspect={p => setInspectingPaper(p)}
                 onSelectForExam={p => {
                   setViewingUnsealedPaper(p);

@@ -16,10 +16,11 @@ MIN_CIE_MARKS = Decimal("40.00")
 
 
 @shared_task
-def process_eligibility_csv(file_content: str, session_id: str):
+def process_eligibility_csv(file_content: str, session_id: str, department_id: str = None):
     """
     Parses a CSV string, calculates eligibility based on attendance and CIE marks,
-    and updates or creates StudentEligibility records.
+    and updates or creates StudentEligibility records. Only processes students 
+    belonging to the provided department_id if given.
     """
     reader = csv.DictReader(io.StringIO(file_content))
     processed = 0
@@ -46,6 +47,10 @@ def process_eligibility_csv(file_content: str, session_id: str):
             subject = Subject.objects.get(code=subject_code)
         except (Student.DoesNotExist, Subject.DoesNotExist):
             errors.append(f"Row {reader.line_num}: Student or Subject not found ({usn}, {subject_code})")
+            continue
+            
+        if department_id and str(student.department_id) != str(department_id):
+            errors.append(f"Row {reader.line_num}: Unauthorized. Student {usn} does not belong to your department.")
             continue
 
         is_eligible = True
@@ -81,24 +86,66 @@ def process_eligibility_csv(file_content: str, session_id: str):
 
 
 @shared_task
-def generate_hall_tickets_for_session(session_id: str):
+def generate_hall_tickets_for_session(session_id: str, department_id: str | None = None):
     """
     Generates Hall Tickets for all students who have at least one 
     eligible subject in the given session.
+    For CIE sessions: generates tickets based on enrollment.
+    For SEE sessions: generates tickets based on eligibility (is_eligible=True).
     """
     try:
         session = ExamSession.objects.get(id=session_id)
     except ExamSession.DoesNotExist:
         return {"status": "error", "message": "Exam Session not found"}
 
-    # Get all students who have at least one eligible subject in this session
-    eligible_students = Student.objects.filter(
-        eligibility_records__exam_session=session,
-        eligibility_records__is_eligible=True
-    ).distinct()
+    # For CIE sessions: generate tickets based on enrollment (no eligibility needed)
+    if session.session_type == 'CIE':
+        from scheduling.models import StudentSubjectEnrollment
+        enrolled_ids = set(
+            StudentSubjectEnrollment.objects.filter(
+                exam_session=session
+            ).values_list('student_id', flat=True)
+        )
+        eligible_students = Student.objects.filter(id__in=enrolled_ids)
+    else:
+        # For SEE sessions: generate tickets based on eligibility
+        eligible_students = Student.objects.filter(
+            eligibility_records__exam_session=session,
+            eligibility_records__is_eligible=True
+        ).distinct()
+
+        # Fallback: eligibility is tracked against the CIE session, so for SEE
+        # sessions use each student's latest eligibility record (any session).
+        if not eligible_students.exists():
+            from scheduling.models import StudentSubjectEnrollment
+            enrolled_ids = set(
+                StudentSubjectEnrollment.objects.filter(
+                    exam_session=session
+                ).values_list('student_id', flat=True)
+            )
+            if enrolled_ids:
+                seen = set()
+                eligible_ids = set()
+                latest = StudentEligibility.objects.filter(
+                    student_id__in=enrolled_ids
+                ).order_by('-updated_at', '-created_at').values_list(
+                    'student_id', 'subject_id', 'is_eligible'
+                )
+                for student_id, subject_id, is_eligible in latest:
+                    key = (student_id, subject_id)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    if is_eligible:
+                        eligible_ids.add(student_id)
+                # Only students with at least one eligible subject get a ticket
+                eligible_students = Student.objects.filter(id__in=eligible_ids)
+
+    if department_id:
+        eligible_students = eligible_students.filter(department_id=department_id)
 
     created_count = 0
-    
+
     with transaction.atomic():
         for student in eligible_students:
             # Create hall ticket if it doesn't exist
@@ -111,6 +158,17 @@ def generate_hall_tickets_for_session(session_id: str):
             )
             if created:
                 created_count += 1
+
+    # Send notifications to students who received new hall tickets
+    if created_count > 0:
+        from notifications.helpers import notify_students_bulk
+        notify_students_bulk(
+            eligible_students,
+            "HALL_TICKET",
+            f"Hall Ticket Generated – {session.name}",
+            f"Your hall ticket for {session.name} has been generated. Please check the Admit Card section.",
+            related_object_id=session.id,
+        )
 
     return {
         "status": "completed",

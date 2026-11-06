@@ -16,11 +16,13 @@ import {
 } from 'lucide-react';
 import { HallTicketPreviewModal } from './components/HallTicketPreviewModal';
 import { BatchGenerateModal } from './components/BatchGenerateModal';
+import { api } from '@/services/api';
 
 interface HallTicketsTabProps {
   hallTickets: HallTicketRecord[];
   students: StudentEligibilityRecord[];
   onUpdateHallTickets: (updatedList: HallTicketRecord[]) => void;
+  onRefreshTickets?: () => void;
 }
 
 const SEMESTER_SUBJECTS: Record<string, { code: string; title: string }[]> = {
@@ -45,6 +47,7 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
   hallTickets,
   students,
   onUpdateHallTickets,
+  onRefreshTickets,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('ALL');
@@ -54,6 +57,29 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [previewingTicket, setPreviewingTicket] = useState<HallTicketRecord | null>(null);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+
+  const [sessions, setSessions] = useState<{id: string, name: string, selected_slots: string[]}[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('NONE');
+
+  React.useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const res = await api.get('/scheduling/sessions/');
+        const data = res.data.results || res.data;
+        setSessions(data);
+        // Auto-select the SEE session so tickets are visible immediately
+        setSelectedSessionId(prev => {
+          if (prev !== 'NONE') return prev;
+          const see = data.find((s: any) =>
+            String(s.session_type || '').toUpperCase() === 'SEE' ||
+            /SEE|SEMESTER END/i.test(s.name || '')
+          ) || data[0];
+          return see ? see.id : 'NONE';
+        });
+      } catch (err) {}
+    };
+    fetchSessions();
+  }, []);
 
   // Helper to look up student eligibility from students state
   const getStudentEligibility = (usn: string) => {
@@ -74,9 +100,13 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
     ? Object.values(SEMESTER_SUBJECTS).flat()
     : SEMESTER_SUBJECTS[selectedSemester] || [];
 
-  const filteredTickets = hallTickets.filter(t => {
+  const filteredTickets = selectedSessionId === 'NONE' ? [] : hallTickets.filter(t => {
+    // 0. Session Filter (Matches ID or Name)
+    const selectedSession = sessions.find(s => s.id === selectedSessionId);
+    if (selectedSession && t.examSession !== selectedSession.name && t.examSession !== selectedSession.id) return false;
+
     // 1. Semester filter
-    if (selectedSemester !== 'ALL' && !t.semester.includes(selectedSemester)) return false;
+    if (selectedSemester !== 'ALL' && !String(t.semester || '').includes(selectedSemester)) return false;
 
     // 2. Exam / CIE Cycle filter
     if (selectedExamCycle !== 'ALL' && (t.examCycle || 'CIE-1') !== selectedExamCycle) return false;
@@ -142,10 +172,13 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
   };
 
   const handleBatchGenerateSuccess = (newTickets: HallTicketRecord[]) => {
-    // Merge new tickets without duplicates
-    const existingUsns = hallTickets.map(t => t.usn);
-    const uniqueNew = newTickets.filter(t => !existingUsns.includes(t.usn));
-    onUpdateHallTickets([...hallTickets, ...uniqueNew]);
+    if (newTickets.length > 0) {
+      const existingUsns = hallTickets.map(t => t.usn);
+      const uniqueNew = newTickets.filter(t => !existingUsns.includes(t.usn));
+      onUpdateHallTickets([...hallTickets, ...uniqueNew]);
+    }
+    // Always re-fetch from backend so freshly generated tickets appear
+    if (onRefreshTickets) onRefreshTickets();
   };
 
   return (
@@ -192,7 +225,7 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
             <CheckCircle2 size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '0.72rem', color: '#16A34A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gateway Cleared (≥75%)</div>
+            <div style={{ fontSize: '0.72rem', color: '#16A34A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gateway Cleared (≥85%)</div>
             <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#15803D' }}>{clearedCount} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16A34A' }}>({totalTickets > 0 ? Math.round((clearedCount / totalTickets) * 100) : 0}%)</span></div>
           </div>
         </div>
@@ -298,6 +331,32 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
             </select>
           </div>
 
+          {/* Exam Schedule / Session Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Layers size={13} /> Exam Session:
+            </span>
+            <select
+              value={selectedSessionId}
+              onChange={e => setSelectedSessionId(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1.5px solid #FCD34D',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#92400E',
+                background: '#FFFBEB',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="NONE">-- Select Exam Session --</option>
+              {sessions.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Exam / CIE Series Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#D97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -317,11 +376,8 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
                 cursor: 'pointer',
               }}
             >
-              <option value="ALL">All Exam Series (CIE-1, CIE-2, SEE)</option>
-              <option value="CIE-1">CIE-1 (Internal Test 1)</option>
-              <option value="CIE-2">CIE-2 (Internal Test 2)</option>
-              <option value="CIE-3">CIE-3 (Internal Test 3)</option>
-              <option value="SEE_FINAL">SEE (Semester End Final)</option>
+              <option value="ALL">All Exam Series (SEE Final)</option>
+              <option value="SEE_FINAL">Semester End Final Examination (SEE)</option>
             </select>
           </div>
 
@@ -376,7 +432,7 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
               }}
             >
               <option value="ALL">All Gateway Statuses</option>
-              <option value="CLEARED">Gate Cleared (≥75% Attendance)</option>
+              <option value="CLEARED">Gate Cleared (≥85% Attendance)</option>
               <option value="CONDONED">Condoned Waivers Approved</option>
               <option value="SHORTAGE">Shortage / Warning</option>
               <option value="DETAINED">Detained / Non-Eligible</option>
@@ -530,7 +586,7 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
                             </div>
 
                             {student.status === 'ELIGIBLE' && (
-                              <Badge variant="success">GATE CLEARED (≥75%)</Badge>
+                              <Badge variant="success">GATE CLEARED (≥85%)</Badge>
                             )}
                             {student.status === 'CONDONABLE' && (
                               student.condonationApproved ? (
@@ -668,6 +724,7 @@ export const HallTicketsTab: React.FC<HallTicketsTabProps> = ({
       {isBatchModalOpen && (
         <BatchGenerateModal
           students={students}
+          sessions={sessions}
           onBatchGenerateSuccess={handleBatchGenerateSuccess}
           onClose={() => setIsBatchModalOpen(false)}
         />

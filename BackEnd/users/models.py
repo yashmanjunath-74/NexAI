@@ -48,6 +48,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=UserRole.STUDENT,
         db_index=True,
     )
+    historical_duties_count = models.IntegerField(default=0)
 
     # ── Department link (for staff) ───────────────────────────────────────────
     department = models.ForeignKey(
@@ -57,6 +58,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         blank=True,
         related_name="staff_members",
     )
+
+    # ── Insecure Password Storage (Requested for Dev) ─────────────────────────
+    plain_password = models.CharField(max_length=128, null=True, blank=True)
 
     # ── Status ────────────────────────────────────────────────────────────────
     is_active = models.BooleanField(default=True)
@@ -162,6 +166,11 @@ class Student(models.Model):
         help_text="Year of joining, e.g. 2022",
     )
     is_lateral_entry = models.BooleanField(default=False)
+    section = models.CharField(
+        max_length=5,
+        default="A",
+        help_text="Class section, e.g. A, B, C",
+    )
 
     # ── Eligibility Snapshot (updated by HOD uploads) ────────────────────────
     overall_attendance_pct = models.DecimalField(

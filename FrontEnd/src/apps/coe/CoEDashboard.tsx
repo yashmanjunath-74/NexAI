@@ -10,9 +10,10 @@ import { AllocationsTab } from './features/allocations/AllocationsTab';
 import { CredentialManagementTab } from './features/credentials/CredentialManagementTab';
 import { RadarTab } from './features/RadarTab';
 import { AuditTab } from './features/AuditTab';
-import { ShieldAlert, BookOpen, Building, CalendarDays, FileText, KeyRound } from 'lucide-react';
+import { ResultsPublishTab } from './features/results/ResultsPublishTab';
+import { ShieldAlert, BookOpen, Building, CalendarDays, FileText, KeyRound, Award } from 'lucide-react';
 
-type Tab = 'VAULT' | 'CURRICULUM' | 'RESOURCES' | 'ALLOCATIONS' | 'CREDENTIALS' | 'RADAR' | 'AUDIT';
+type Tab = 'VAULT' | 'CURRICULUM' | 'RESOURCES' | 'ALLOCATIONS' | 'CREDENTIALS' | 'RADAR' | 'AUDIT' | 'RESULTS';
 
 export default function CoEDashboard() {
   const user = useAuthStore(s => s.user);
@@ -28,22 +29,37 @@ export default function CoEDashboard() {
   const [error] = useState('');
 
   useEffect(() => {
-    // Mock fetching data
-    setTimeout(() => {
-      setPapers([
-        { id: '1', title: 'Data Structures Final', subject_code: 'CS201', exam_session_name: 'Fall 2026', status: 'VAULTED', ipfs_cid: 'Qm123...' },
-        { id: '2', title: 'Algorithms Midterm', subject_code: 'CS301', exam_session_name: 'Fall 2026', status: 'APPROVED' },
-        { id: '3', title: 'Operating Systems', subject_code: 'CS401', exam_session_name: 'Fall 2026', status: 'SUBMITTED' },
-      ]);
-      setRadarData([
-        { session_id: '1', student_usn: '1RV20CS001', timetable_slot: 'Morning', high_severity_flags: 1, medium_severity_flags: 2, low_severity_flags: 0, total_flags: 3, latest_event: 'Multiple faces detected' }
-      ]);
-      setAuditLogs([
-        { id: '1', timestamp: new Date().toISOString(), actor_name: 'Dr. Smith', actor_email: 'smith@univ.edu', action: 'Approved Question Paper CS201', severity: 'MEDIUM', details: {} }
-      ]);
-      setMetrics({ total_students_evaluated: 1250, average_gpa: 7.4, pass_percentage: 82.5 });
-      setLoading(false);
-    }, 1000);
+    import('@/services/api').then(({ api }) => {
+      // Fetch Audit Logs
+      api.get('/coe/audit/')
+        .then(res => {
+          const rawAudit = res.data.results || res.data;
+          setAuditLogs(rawAudit.map((log: any) => ({
+            id: log.id,
+            timestamp: log.timestamp,
+            actor_name: log.actor?.full_name || 'System',
+            actor_email: log.actor?.email || 'N/A',
+            action: log.action,
+            severity: log.severity,
+            details: log.details
+          })));
+        })
+        .catch(console.error);
+
+      // We still mock metrics/papers/radar for now unless we need them live
+      setTimeout(() => {
+        setPapers([
+          { id: '1', title: 'Data Structures Final', subject_code: 'CS201', exam_session_name: 'Fall 2026', status: 'VAULTED', ipfs_cid: 'Qm123...' },
+          { id: '2', title: 'Algorithms Midterm', subject_code: 'CS301', exam_session_name: 'Fall 2026', status: 'APPROVED' },
+          { id: '3', title: 'Operating Systems', subject_code: 'CS401', exam_session_name: 'Fall 2026', status: 'SUBMITTED' },
+        ]);
+        setRadarData([
+          { session_id: '1', student_usn: '1RV20CS001', timetable_slot: 'Morning', high_severity_flags: 1, medium_severity_flags: 2, low_severity_flags: 0, total_flags: 3, latest_event: 'Multiple faces detected' }
+        ]);
+        setMetrics({ total_students_evaluated: 1250, average_gpa: 7.4, pass_percentage: 82.5 });
+        setLoading(false);
+      }, 500);
+    });
   }, []);
 
   const renderTabContent = () => {
@@ -62,12 +78,15 @@ export default function CoEDashboard() {
         return <RadarTab data={radarData} loading={loading} error={error} />;
       case 'AUDIT':
         return <AuditTab logs={auditLogs} metrics={metrics} loading={loading} error={error} />;
+      case 'RESULTS':
+        return <ResultsPublishTab />;
       default:
         return <div>Select a tab</div>;
     }
   };
 
   const sidebarItems = [
+    { id: 'RESULTS', label: 'Results Publication', icon: <Award size={20} /> },
     { id: 'ALLOCATIONS', label: 'SEE Allocations & Schedules', icon: <CalendarDays size={20} /> },
     { id: 'CREDENTIALS', label: 'User Access & Credentials', icon: <KeyRound size={20} /> },
     { id: 'CURRICULUM', label: 'Curriculum', icon: <BookOpen size={20} /> },

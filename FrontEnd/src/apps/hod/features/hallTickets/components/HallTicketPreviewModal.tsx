@@ -12,7 +12,32 @@ export const HallTicketPreviewModal: React.FC<HallTicketPreviewModalProps> = ({
   onClose,
 }) => {
   return (
-    <div style={{
+    <>
+      <style>
+        {`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            #printable-hall-ticket, #printable-hall-ticket * {
+              visibility: visible;
+            }
+            #printable-hall-ticket {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              margin: 0;
+              padding: 0;
+            }
+            @page {
+              size: A4;
+              margin: 15mm;
+            }
+          }
+        `}
+      </style>
+      <div style={{
       position: 'fixed',
       top: 0,
       left: 0,
@@ -95,7 +120,7 @@ export const HallTicketPreviewModal: React.FC<HallTicketPreviewModalProps> = ({
         </div>
 
         {/* Printable Admit Card Sheet */}
-        <div style={{ padding: '32px 36px', background: '#ffffff', fontFamily: 'sans-serif' }}>
+        <div id="printable-hall-ticket" style={{ padding: '32px 36px', background: '#ffffff', fontFamily: 'sans-serif' }}>
           <div style={{
             border: '2px solid #0f172a',
             borderRadius: '12px',
@@ -106,24 +131,24 @@ export const HallTicketPreviewModal: React.FC<HallTicketPreviewModalProps> = ({
             {/* University Header */}
             <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '14px', marginBottom: '18px' }}>
               <div style={{ fontSize: '0.82rem', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', color: '#334155' }}>
-                NEXAI AUTONOMOUS UNIVERSITY OF TECHNOLOGY
+                MALNAD COLLEGE OF ENGINEERING
               </div>
               <h2 style={{ margin: '4px 0', fontSize: '1.35rem', fontWeight: 900, color: '#0f172a' }}>
                 OFFICIAL EXAMINATION ADMIT CARD / HALL TICKET
               </h2>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
                 <span style={{
-                  background: ticket.examCycle === 'SEE_FINAL' ? '#DCFCE7' : ticket.examCycle === 'CIE-2' ? '#FEF3C7' : '#EEF2FF',
-                  color: ticket.examCycle === 'SEE_FINAL' ? '#15803D' : ticket.examCycle === 'CIE-2' ? '#B45309' : '#4338CA',
+                  background: '#DCFCE7',
+                  color: '#15803D',
                   fontWeight: 900,
                   fontSize: '0.78rem',
                   padding: '3px 12px',
                   borderRadius: '20px',
-                  border: `1.5px solid ${ticket.examCycle === 'SEE_FINAL' ? '#86EFAC' : ticket.examCycle === 'CIE-2' ? '#FDE68A' : '#C7D2FE'}`,
+                  border: '1.5px solid #86EFAC',
                   letterSpacing: '0.5px',
                   textTransform: 'uppercase'
                 }}>
-                  {ticket.examCycle ? `Evaluation: ${ticket.examCycle}` : 'Continuous Internal Evaluation (CIE-1)'}
+                  Semester End Final Examination (SEE)
                 </span>
                 <span style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 700 }}>
                   • {ticket.examSession}
@@ -204,13 +229,15 @@ export const HallTicketPreviewModal: React.FC<HallTicketPreviewModalProps> = ({
                         {s.subjectTitle}
                       </td>
                       <td style={{ padding: '8px 10px', borderRight: '1px solid #cbd5e1' }}>
-                        {s.examDate}
+                        {s.examDate || '—'}
                       </td>
                       <td style={{ padding: '8px 10px', borderRight: '1px solid #cbd5e1' }}>
-                        {s.examTime}
+                        {s.examTime || '—'}
                       </td>
                       <td style={{ padding: '8px 10px', fontWeight: 800, color: '#2563eb' }}>
-                        {s.roomAllocated} ({s.deskNumber})
+                        {s.roomAllocated
+                          ? `${s.roomAllocated}${s.deskNumber ? ` (${s.deskNumber})` : ''}`
+                          : 'Hall not allotted yet'}
                       </td>
                     </tr>
                   ))}
@@ -282,5 +309,6 @@ export const HallTicketPreviewModal: React.FC<HallTicketPreviewModalProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };

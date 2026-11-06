@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 
 // Lazy-loaded role dashboards
@@ -11,6 +11,7 @@ const EvaluatorDashboard = lazy(() => import("@/apps/evaluator/EvaluatorDashboar
 const ScrutinizerDashboard = lazy(() => import("@/apps/scrutinizer/ScrutinizerDashboard"));
 const ScanningDashboard = lazy(() => import("@/apps/scanning/ScanningDashboard"));
 const FacultyDashboard  = lazy(() => import("@/apps/faculty/FacultyDashboard"));
+const AdmissionDashboard = lazy(() => import("@/apps/admission/AdmissionDashboard"));
 const LoginPage         = lazy(() => import("@/apps/auth/LoginPage"));
 
 // Role → Dashboard component map
@@ -19,11 +20,12 @@ const ROLE_ROUTES: Record<string, string> = {
   HOD: "/hod",
   PAPER_SETTER: "/setter",
   EVALUATOR: "/evaluator",
-  SCRUTINIZER: "/scrutinizer",
+  SCRUTINIZER: "/main-evaluator",
   SCANNING_OFFICER: "/scanning",
   FACULTY: "/faculty",
   INVIGILATOR: "/mobile-app",
   STUDENT: "/mobile-app",
+  ADMISSION: "/admission",
 };
 
 function RoleGuard({ allowedRoles, children }: { allowedRoles: string[]; children: React.ReactNode }) {
@@ -129,6 +131,7 @@ function UnauthorizedPage() {
 
 function MobileAppRedirectPage() {
   const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const isInvigilator = user?.role === "INVIGILATOR";
   const appTitle = isInvigilator ? "NexAI Invigilator App" : "NexAI Student App";
   const appPath = isInvigilator ? "Apps/nexai_invigilator" : "Apps/nexai_student";
@@ -195,7 +198,7 @@ function MobileAppRedirectPage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <button
-            onClick={logout}
+            onClick={() => { logout(); navigate('/login'); }}
             style={{
               padding: "12px 20px",
               background: "linear-gradient(135deg, #48977F 0%, #2F6852 100%)",
@@ -262,9 +265,9 @@ export default function App() {
             <RoleGuard allowedRoles={["PAPER_SETTER"]}><SetterWorkspace /></RoleGuard>
           } />
           <Route path="/evaluator/*" element={
-            <RoleGuard allowedRoles={["EVALUATOR"]}><EvaluatorDashboard /></RoleGuard>
+            <RoleGuard allowedRoles={["EVALUATOR", "FACULTY"]}><EvaluatorDashboard /></RoleGuard>
           } />
-          <Route path="/scrutinizer/*" element={
+          <Route path="/main-evaluator/*" element={
             <RoleGuard allowedRoles={["SCRUTINIZER"]}><ScrutinizerDashboard /></RoleGuard>
           } />
           <Route path="/scanning/*" element={
@@ -272,6 +275,9 @@ export default function App() {
           } />
           <Route path="/faculty/*" element={
             <RoleGuard allowedRoles={["FACULTY", "CHIEF_SUPERINTENDENT"]}><FacultyDashboard /></RoleGuard>
+          } />
+          <Route path="/admission/*" element={
+            <RoleGuard allowedRoles={["ADMISSION"]}><AdmissionDashboard /></RoleGuard>
           } />
 
           {/* Mobile-only portal notice for Invigilator & Student */}

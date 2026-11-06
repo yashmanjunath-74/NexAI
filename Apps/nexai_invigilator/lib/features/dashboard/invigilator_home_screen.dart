@@ -2,29 +2,76 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/exam_models.dart';
-import '../../mock_data.dart';
 import '../verification/qr_verifier_modal.dart';
 import '../scanner/booklet_scanner_modal.dart';
 import '../incident/report_incident_modal.dart';
 import '../handover/session_handover_modal.dart';
 
+import '../../repositories/invigilator_repository.dart';
+
 class InvigilatorHomeScreen extends StatefulWidget {
-  const InvigilatorHomeScreen({super.key});
+  final String? sessionKey;
+  
+  const InvigilatorHomeScreen({super.key, this.sessionKey});
 
   @override
   State<InvigilatorHomeScreen> createState() => _InvigilatorHomeScreenState();
 }
 
 class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with SingleTickerProviderStateMixin {
-  late InvigilatorSession _session;
+  final InvigilatorRepository _repository = InvigilatorRepository();
+  bool _isLoading = true;
+  String? _errorMessage;
   late TabController _tabController;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _session = MOCK_SESSION;
     _tabController = TabController(length: 3, vsync: this);
+    _loadSession();
+  }
+
+  Future<void> _loadSession() async {
+    if (widget.sessionKey == null) {
+      setState(() {
+        _errorMessage = 'No exam session key provided. Open a duty from "My Exam Duties" to start a session.';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final session = await _repository.activateSession(widget.sessionKey!);
+      setState(() {
+        _session = session;
+        _errorMessage = null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _refreshSession() async {
+    if (widget.sessionKey == null) return;
+    try {
+      final session = await _repository.activateSession(widget.sessionKey!);
+      if (!mounted) return;
+      setState(() => _session = session);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session refreshed from server.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(InvigilatorRepository.extractApiError(e)),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
   @override
@@ -33,92 +80,142 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
     super.dispose();
   }
 
-  void _verifyStudent(String usn) {
-    setState(() {
-      final updatedStudents = _session.students.map((s) {
-        if (s.usn == usn) {
-          return s.copyWith(
-            isQrVerified: true,
-            isBiometricMatched: true,
-            status: StudentAttendanceStatus.present,
-          );
-        }
-        return s;
-      }).toList();
-
-      _session = InvigilatorSession(
-        sessionId: _session.sessionId,
-        hallNumber: _session.hallNumber,
-        courseCode: _session.courseCode,
-        courseTitle: _session.courseTitle,
-        examDate: _session.examDate,
-        timeSlot: _session.timeSlot,
-        chiefInvigilatorName: _session.chiefInvigilatorName,
-        students: updatedStudents,
-        incidents: _session.incidents,
+  /// Marks attendance via backend (QR-validated when a payload is given).
+  Future<AttendanceResult> _markAttendance(
+    String usn, {
+    String? qrPayload,
+    String status = 'present',
+  }) async {
+    if (widget.sessionKey == null) {
+      return const AttendanceResult(
+        success: false,
+        message: 'No active session key.',
       );
-    });
+    }
+
+    final result = await _repository.markAttendance(
+      widget.sessionKey!,
+      usn,
+      qrPayload: qrPayload,
+      status: status,
+    );
+
+    if (result.success && mounted) {
+      final newStatus = _statusFrom(result.status);
+      setState(() {
+        _session = _session.copyWith(
+          students: _session.students.map((s) {
+            if (s.usn != usn) return s;
+            return s.copyWith(
+              status: newStatus,
+              isQrVerified: s.isQrVerified || qrPayload != null,
+            );
+          }).toList(),
+        );
+      });
+    }
+    return result;
   }
 
-  void _ingestBooklet(String usn, String barcode, String dummyBarcode, int digitizedPages) {
-    setState(() {
-      final updatedStudents = _session.students.map((s) {
-        if (s.usn == usn) {
-          return s.copyWith(
-            bookletBarcode: barcode,
-            dummyBarcode: dummyBarcode,
-            digitizedPagesCount: digitizedPages,
-          );
-        }
-        return s;
-      }).toList();
-
-      _session = InvigilatorSession(
-        sessionId: _session.sessionId,
-        hallNumber: _session.hallNumber,
-        courseCode: _session.courseCode,
-        courseTitle: _session.courseTitle,
-        examDate: _session.examDate,
-        timeSlot: _session.timeSlot,
-        chiefInvigilatorName: _session.chiefInvigilatorName,
-        students: updatedStudents,
-        incidents: _session.incidents,
-      );
-    });
+  StudentAttendanceStatus _statusFrom(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'present':
+        return StudentAttendanceStatus.present;
+      case 'absent':
+        return StudentAttendanceStatus.absent;
+      case 'malpractice':
+        return StudentAttendanceStatus.malpractice;
+      default:
+        return StudentAttendanceStatus.unverified;
+    }
   }
 
-  void _reportIncident(IncidentReportItem incident) {
-    setState(() {
-      final updatedStudents = _session.students.map((s) {
-        if (s.usn == incident.studentUsn) {
-          return s.copyWith(status: StudentAttendanceStatus.malpractice);
-        }
-        return s;
-      }).toList();
+  Color _statusColor(StudentAttendanceStatus status) {
+    switch (status) {
+      case StudentAttendanceStatus.present:
+        return AppTheme.accentGreen;
+      case StudentAttendanceStatus.absent:
+        return AppTheme.accentAmber;
+      case StudentAttendanceStatus.malpractice:
+        return AppTheme.accentRed;
+      case StudentAttendanceStatus.unverified:
+        return Colors.grey;
+    }
+  }
 
-      _session = InvigilatorSession(
-        sessionId: _session.sessionId,
-        hallNumber: _session.hallNumber,
-        courseCode: _session.courseCode,
-        courseTitle: _session.courseTitle,
-        examDate: _session.examDate,
-        timeSlot: _session.timeSlot,
-        chiefInvigilatorName: _session.chiefInvigilatorName,
-        students: updatedStudents,
-        incidents: [incident, ..._session.incidents],
+  /// Persists a booklet tag; returns null on success or an error message.
+  Future<String?> _ingestBooklet(
+    String usn,
+    String barcode,
+    String dummyBarcode,
+  ) async {
+    if (widget.sessionKey == null) return 'No active session key.';
+    try {
+      final resp = await _repository.ingestBooklet(
+        widget.sessionKey!,
+        usn,
+        barcode,
+        dummyBarcode,
       );
-    });
+      if (mounted) {
+        setState(() {
+          _session = _session.copyWith(
+            students: _session.students.map((s) {
+              if (s.usn != usn) return s;
+              return s.copyWith(
+                bookletBarcode: '${resp['booklet_barcode'] ?? barcode}',
+                dummyBarcode: '${resp['dummy_barcode'] ?? dummyBarcode}',
+                digitizedPagesCount: 0,
+              );
+            }).toList(),
+          );
+        });
+      }
+      return null;
+    } catch (e) {
+      return InvigilatorRepository.extractApiError(e);
+    }
+  }
+
+  /// Persists a malpractice incident; returns null on success or an error.
+  Future<String?> _reportIncident(
+    String usn,
+    String infractionType,
+    String description,
+  ) async {
+    if (widget.sessionKey == null) return 'No active session key.';
+    try {
+      final incident = await _repository.reportIncident(
+        widget.sessionKey!,
+        usn,
+        infractionType,
+        description,
+      );
+      if (mounted) {
+        setState(() {
+          _session = _session.copyWith(
+            students: _session.students.map((s) {
+              if (s.usn != usn) return s;
+              return s.copyWith(status: StudentAttendanceStatus.malpractice);
+            }).toList(),
+            incidents: [incident, ..._session.incidents],
+          );
+        });
+      }
+      return null;
+    } catch (e) {
+      return InvigilatorRepository.extractApiError(e);
+    }
   }
 
   void _openQRScanner() {
-    final unverified = _session.students.where((s) => s.status == StudentAttendanceStatus.unverified || !s.isQrVerified).toList();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => QRVerifierModal(
-        unverifiedStudents: unverified,
-        onVerifyStudent: _verifyStudent,
+        session: _session,
+        onVerifyStudent: _markAttendance,
       ),
     );
   }
@@ -168,8 +265,59 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
     );
   }
 
+  late InvigilatorSession _session;
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_errorMessage != null) {
+      final displayMessage = InvigilatorRepository.extractApiError(_errorMessage!);
+      return Scaffold(
+        backgroundColor: AppTheme.bgBase,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.lock_clock, size: 80, color: AppTheme.accentAmber),
+                const SizedBox(height: 24),
+                const Text(
+                  'Session Not Available',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  displayMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary, height: 1.5),
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _errorMessage = null;
+                    });
+                    _loadSession();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Try Again'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppTheme.bgBase,
       appBar: AppBar(
@@ -193,6 +341,11 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
           ],
         ),
         actions: [
+          IconButton(
+            onPressed: _refreshSession,
+            icon: const Icon(Icons.sync, color: AppTheme.primary),
+            tooltip: 'Refresh Session',
+          ),
           IconButton(
             onPressed: _openHandover,
             icon: const Icon(Icons.lock_clock, color: AppTheme.primary),
@@ -244,7 +397,7 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
                       ),
                     ),
                     Text(
-                      _session.timeSlot,
+                      '${_session.examDate} • ${_session.timeSlot}',
                       style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -317,15 +470,17 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
           // Tabs Header
           TabBar(
             controller: _tabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: AppTheme.primaryDark,
             unselectedLabelColor: AppTheme.textSecondary,
             indicatorColor: AppTheme.primary,
             indicatorWeight: 3,
             labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13),
-            tabs: const [
-              Tab(text: 'Seating Blueprint'),
-              Tab(text: 'Candidate Roster'),
-              Tab(text: 'Incidents (1)'),
+            tabs: [
+              const Tab(text: 'Seating Blueprint'),
+              const Tab(text: 'Candidate Roster'),
+              Tab(text: 'Incidents (${_session.incidents.length})'),
             ],
           ),
 
@@ -376,7 +531,7 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Room 2D Desk Map', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              Text('${_session.hallNumber} Desk Map', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               Row(
                 children: [
                   _buildLegendItem('Present', AppTheme.accentGreen),
@@ -392,36 +547,19 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
 
           Expanded(
             child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 1.5,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 220,
+                childAspectRatio: 1.45,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
               itemCount: _session.students.length,
               itemBuilder: (context, i) {
                 final student = _session.students[i];
-                Color statusColor;
-                String statusLabel;
-
-                switch (student.status) {
-                  case StudentAttendanceStatus.present:
-                    statusColor = AppTheme.accentGreen;
-                    statusLabel = 'PRESENT ✓';
-                    break;
-                  case StudentAttendanceStatus.absent:
-                    statusColor = AppTheme.accentAmber;
-                    statusLabel = 'ABSENT';
-                    break;
-                  case StudentAttendanceStatus.malpractice:
-                    statusColor = AppTheme.accentRed;
-                    statusLabel = 'MALPRACTICE';
-                    break;
-                  case StudentAttendanceStatus.unverified:
-                    statusColor = Colors.grey;
-                    statusLabel = 'UNVERIFIED';
-                    break;
-                }
+                final statusColor = _statusColor(student.status);
+                final statusLabel = student.status == StudentAttendanceStatus.present
+                    ? 'PRESENT ✓'
+                    : student.status.name.toUpperCase();
 
                 return InkWell(
                   onTap: () => _toggleStudentStatus(student),
@@ -449,10 +587,15 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              student.deskId,
-                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                            Flexible(
+                              child: Text(
+                                student.deskId,
+                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
+                            const SizedBox(width: 4),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
@@ -477,6 +620,8 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
                             ),
                             Text(
                               student.usn,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
                             ),
                           ],
@@ -520,34 +665,43 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Quick Status: ${student.studentName} (${student.deskId})', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text('${student.usn} • ${student.seatPosition} • ${student.status.name.toUpperCase()}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.check_circle, color: AppTheme.accentGreen),
               title: const Text('Mark Present'),
-              onTap: () {
-                _verifyStudent(student.usn);
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
+                final result = await _markAttendance(student.usn);
+                if (!mounted) return;
+                messenger.showSnackBar(SnackBar(
+                  content: Text(result.success
+                      ? (result.alreadyMarked
+                          ? 'Already marked ${result.status.toLowerCase()} for ${student.studentName}.'
+                          : 'Marked present: ${student.studentName} (${result.seat})')
+                      : result.message),
+                  backgroundColor: result.success ? null : Colors.red,
+                ));
               },
             ),
             ListTile(
               leading: const Icon(Icons.cancel, color: AppTheme.accentAmber),
               title: const Text('Mark Absent'),
-              onTap: () {
-                setState(() {
-                  final updated = _session.students.map((s) => s.usn == student.usn ? s.copyWith(status: StudentAttendanceStatus.absent) : s).toList();
-                  _session = InvigilatorSession(
-                    sessionId: _session.sessionId,
-                    hallNumber: _session.hallNumber,
-                    courseCode: _session.courseCode,
-                    courseTitle: _session.courseTitle,
-                    examDate: _session.examDate,
-                    timeSlot: _session.timeSlot,
-                    chiefInvigilatorName: _session.chiefInvigilatorName,
-                    students: updated,
-                    incidents: _session.incidents,
-                  );
-                });
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
+                final result = await _markAttendance(student.usn, status: 'absent');
+                if (!mounted) return;
+                messenger.showSnackBar(SnackBar(
+                  content: Text(result.success
+                      ? (result.alreadyMarked
+                          ? 'Already marked ${result.status.toLowerCase()} for ${student.studentName}.'
+                          : 'Marked absent: ${student.studentName}')
+                      : result.message),
+                  backgroundColor: result.success ? null : Colors.red,
+                ));
               },
             ),
           ],
@@ -638,8 +792,30 @@ class _InvigilatorHomeScreenState extends State<InvigilatorHomeScreen> with Sing
                         ],
                       ),
                     ),
-                    if (student.isQrVerified)
-                      const Icon(Icons.verified, color: AppTheme.accentGreen, size: 20),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _statusColor(student.status).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            student.status.name.toUpperCase(),
+                            style: TextStyle(
+                              color: _statusColor(student.status),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ),
+                        if (student.isQrVerified) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.verified, color: AppTheme.accentGreen, size: 18),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               );

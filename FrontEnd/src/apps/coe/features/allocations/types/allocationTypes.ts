@@ -84,6 +84,9 @@ export interface RoomAllocationResult {
   seatedCandidates: SeatedCandidate[];
   occupiedCount: number;
   emptyCount: number;
+  examDate?: string;
+  startTime?: string;
+  endTime?: string;
   chiefInvigilator: FacultyInvigilator;
   relieverInvigilator?: FacultyInvigilator;
   departmentTallies: Record<string, number>;
@@ -118,6 +121,8 @@ export interface SessionScopeConfig {
   selectedSemesters: SemesterNumber[];
   examsPerDay: 1 | 2;
   startDate: string;
+  endDate: string;
+  firstExamDate?: string;
   selectedSlots: TimeSlot[];
   specialInstructions?: string;
 }

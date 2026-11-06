@@ -2,9 +2,87 @@
 NexAI Evaluation – AnswerScript model and related grading models.
 An AnswerScript is the digitized, anonymized student answer booklet.
 """
+import secrets
 import uuid
 from django.db import models
 
+# Unambiguous alphabet: no 0/O, 1/I (handwritten codes are read aloud often).
+ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+class EvaluationBundle(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    evaluator = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="evaluation_bundles",
+        limit_choices_to={"role__in": ["EVALUATOR", "SCRUTINIZER", "FACULTY"]},
+    )
+    subject = models.ForeignKey("scheduling.Subject", on_delete=models.CASCADE)
+    exam_session = models.ForeignKey("scheduling.ExamSession", on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("CREATED", "Created – Unassigned"),
+            ("ASSIGNED", "Assigned"),
+            ("IN_PROGRESS", "In Progress"),
+            ("COMPLETED", "Completed – Awaiting Verification"),
+            ("VERIFIED", "Marks Verified"),
+            ("CERTIFIED", "Certified"),
+            ("DISPATCHED", "Dispatched"),
+        ],
+        default="ASSIGNED",
+    )
+
+    class Meta:
+        db_table = "evaluation_bundle"
+
+    access_code = models.CharField(
+        max_length=16,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Secure one-time access code handed to the assigned faculty/evaluator.",
+    )
+    redeemed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the assigned evaluator entered the access code (unlocks their dashboard queue).",
+    )
+
+    @staticmethod
+    def _generate_access_code():
+        for _ in range(64):
+            code = "".join(secrets.choice(ACCESS_CODE_ALPHABET) for _ in range(8))
+            if not EvaluationBundle.objects.filter(access_code=code).exists():
+                return code
+        raise RuntimeError("Could not generate a unique bundle access code")
+
+    def save(self, *args, **kwargs):
+        # Every assigned bundle always carries a unique secure access code.
+        if self.evaluator_id and not self.access_code:
+            self.access_code = self._generate_access_code()
+        super().save(*args, **kwargs)
+
+    def attempts_qs(self):
+        """Answer booklets belonging to this bundle (linked, with legacy fallback)."""
+        from student.models import SEEAttempt
+
+        linked = SEEAttempt.objects.filter(evaluation_bundle=self)
+        if linked.exists():
+            return linked
+        return SEEAttempt.objects.filter(
+            subject=self.subject,
+            exam_session=self.exam_session,
+            is_locked=True,
+            evaluation_bundle__isnull=True,
+        )
+
+    def __str__(self):
+        return f"{self.name} - {self.evaluator.full_name if self.evaluator else 'Unassigned'}"
 
 class AnswerScript(models.Model):
     """
@@ -99,7 +177,14 @@ class AnswerScript(models.Model):
         null=True,
         blank=True,
         related_name="assigned_scripts",
-        limit_choices_to={"role__in": ["EVALUATOR", "SCRUTINIZER"]},
+        limit_choices_to={"role__in": ["EVALUATOR", "SCRUTINIZER", "FACULTY"]},
+    )
+    evaluation_bundle = models.ForeignKey(
+        "EvaluationBundle",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="answer_scripts",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

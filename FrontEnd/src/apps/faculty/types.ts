@@ -1,4 +1,5 @@
 export interface AssignedCourse {
+  id?: string;
   code: string;
   title: string;
   department: string;
@@ -17,21 +18,22 @@ export interface StudentGradeRecord {
   name: string;
   email: string;
   courseCode: string;
-  attendancePercent: number;
-  classesHeld: number;
-  classesAttended: number;
-  cie1: number; // out of 30
-  cie2: number; // out of 30
-  labOrQuiz: number; // out of 20
+  attendancePercent: number | string;
+  cie1: number | string; // conducted for 20, reduced to 10
+  cie2: number | string; // conducted for 20, reduced to 10
+  cie3: number | string; // conducted for 20, reduced to 10
+  labOrProject: number | string; // out of 20
   totalCIE: number; // out of 50
   remarks?: string;
   isModified?: boolean;
+  saveStatus?: 'SYNCED' | 'UNSAVED' | 'SAVING' | 'FAILED';
 }
 
 export interface FacultyCIEQuestion {
   id: string;
   qNumber: string;
   text: string;
+  answer: string;
   marks: number;
   bloomsLevel: 'L1' | 'L2' | 'L3' | 'L4' | 'L5';
   co: 'CO1' | 'CO2' | 'CO3' | 'CO4' | 'CO5';
@@ -42,13 +44,14 @@ export interface FacultyCIEPaper {
   courseCode: string;
   courseTitle: string;
   semester: string;
-  testType: 'CIE-1' | 'CIE-2' | 'ASSIGNMENT_TEST';
+  testType: 'CIE-1' | 'CIE-2' | 'CIE-3' | 'ASSIGNMENT_TEST';
   maxMarks: number;
   status: 'DRAFT' | 'SUBMITTED_TO_HOD' | 'APPROVED' | 'REVISION_REQUESTED';
   hodRemarks?: string;
   auditedAt?: string;
   submittedAt?: string;
   questions: FacultyCIEQuestion[];
+  facultyName?: string;
 }
 
 export interface SEESessionKeyValidation {
@@ -95,6 +98,7 @@ export interface CIEScriptQuestionScore {
   awardedMarks: number;
   evaluatorRemarks?: string;
   isEvaluated?: boolean;
+  answerText?: string;
 }
 
 export interface CIEScannedScript {
@@ -107,7 +111,7 @@ export interface CIEScannedScript {
   testType: 'CIE-1' | 'CIE-2';
   submittedAt: string;
   totalPages: number;
-  status: 'PENDING_VALUATION' | 'EVALUATED';
+  status: 'PENDING_VALUATION' | 'EVALUATED' | 'NOT_SUBMITTED';
   maxMarks: number;
   evaluatorTotalMarks?: number;
   aiSuggestedMarks?: number;

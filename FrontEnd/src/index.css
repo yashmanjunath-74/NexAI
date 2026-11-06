@@ -103,3 +103,94 @@ a:hover { color: var(--color-primary-hover); }
   border-radius: var(--radius-full); 
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+
+.print-only {
+  display: none;
+}
+
+/* ─── Print Styles ───────────────────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  /* Hide the sidebar, background vectors, and other layout elements */
+  aside, svg, .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  /* Reset the main layout to take full page */
+  body, #root, main, div[style*="marginLeft"] {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  
+  /* Hide all siblings of the modal when printing */
+  .hide-children-on-print > *:not(.print-modal-wrapper) {
+    display: none !important;
+  }
+  
+  /* Modal wrapper: Use static flow to allow multi-page printing, while escaping paddings */
+  .print-modal-wrapper {
+    position: static !important;
+    background: white !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+  
+  /* Strip padding/margins from the main layout so it doesn't squish the modal */
+  .main-layout-root, .main-layout-content {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Modal container: make it full width, no shadows or rounding */
+  .print-modal-container {
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  /* Prevent scroll containers from cutting off content on print */
+  .print-scroll-container {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    display: block !important;
+  }
+
+  /* Hide modal close buttons or footer actions */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Ensure grid columns don't collapse */
+  .print-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+
+  /* Prevent page breaks inside important blocks */
+  .print-avoid-break {
+    page-break-inside: avoid;
+  }
+}

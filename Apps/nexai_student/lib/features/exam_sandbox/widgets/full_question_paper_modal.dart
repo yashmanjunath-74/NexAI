@@ -5,11 +5,23 @@ import '../../../models/student_models.dart';
 
 class FullQuestionPaperModal extends StatefulWidget {
   final List<ExamQuestionItem> questions;
+  final ExamScheduleItem exam;
+  final int totalMarks;
+  final int? durationMins;
+  final String? instructions;
+  final String? usn;
+  final String? sessionName;
   final Function(int questionIndex) onSelectQuestion;
 
   const FullQuestionPaperModal({
     super.key,
     required this.questions,
+    required this.exam,
+    required this.totalMarks,
+    this.durationMins,
+    this.instructions,
+    this.usn,
+    this.sessionName,
     required this.onSelectQuestion,
   });
 
@@ -47,31 +59,37 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryLight,
-                        borderRadius: BorderRadius.circular(10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryLight,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.description, color: AppTheme.primary, size: 20),
                       ),
-                      child: const Icon(Icons.description, color: AppTheme.primary, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Complete Question Paper',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Complete Question Paper',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const Text(
+                              'Tap any question to jump directly & answer',
+                              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
-                        const Text(
-                          'Tap any question to jump directly & answer',
-                          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
                 Row(
                   children: [
@@ -130,7 +148,7 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
                       child: Column(
                         children: [
                           Text(
-                            'NEXAI AUTONOMOUS UNIVERSITY OF TECHNOLOGY',
+                            'MALNAD COLLEGE OF ENGINEERING, HASSAN',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.w900,
@@ -141,7 +159,7 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Sixth Semester B.Tech Degree Examination — Fall 2026',
+                            widget.sessionName ?? 'Degree Examination',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11 * _fontSizeScale,
@@ -151,7 +169,7 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'CS201: DATA STRUCTURES & ALGORITHMS',
+                            '${widget.exam.courseCode}: ${widget.exam.courseTitle}',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.w900,
@@ -174,11 +192,13 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Time: 3 Hours',
+                              widget.durationMins == null
+                                  ? 'Time: —'
+                                  : 'Time: ${widget.durationMins} Mins',
                               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11 * _fontSizeScale),
                             ),
                             Text(
-                              'Max. Marks: 100 Marks',
+                              'Max. Marks: ${widget.totalMarks} Marks',
                               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11 * _fontSizeScale, color: AppTheme.accentBlue),
                             ),
                           ],
@@ -190,7 +210,9 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'USN: 1NX22CS001',
+                            (widget.usn == null || widget.usn!.isEmpty)
+                                ? 'USN: —'
+                                : 'USN: ${widget.usn}',
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontWeight: FontWeight.w900,
@@ -203,59 +225,44 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
 
                     const SizedBox(height: 10),
 
-                    // General Instructions
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                    // General Instructions — only the paper's real text; no fabricated list
+                    if (widget.instructions != null)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Instructions to Candidates:', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10 * _fontSizeScale)),
+                            const SizedBox(height: 4),
+                            ...widget.instructions!
+                                .split('\n')
+                                .where((line) => line.trim().isNotEmpty)
+                                .map((line) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 2),
+                                      child: Text(
+                                        line.trim(),
+                                        style: TextStyle(fontSize: 9.5 * _fontSizeScale, color: AppTheme.textSecondary),
+                                      ),
+                                    )),
+                          ],
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Instructions to Candidates:', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10 * _fontSizeScale)),
-                          const SizedBox(height: 4),
-                          Text('1. Answer FIVE full questions, choosing ONE full question from each module.', style: TextStyle(fontSize: 9.5 * _fontSizeScale, color: AppTheme.textSecondary)),
-                          Text('2. Missing data, if any, may be suitably assumed.', style: TextStyle(fontSize: 9.5 * _fontSizeScale, color: AppTheme.textSecondary)),
-                          Text('3. Use of non-programmable scientific calculators is permitted.', style: TextStyle(fontSize: 9.5 * _fontSizeScale, color: AppTheme.textSecondary)),
-                        ],
-                      ),
-                    ),
 
                     const SizedBox(height: 18),
                     const Divider(color: Color(0xFF0F172A), thickness: 1),
 
                     // ── Questions List by Modules ──
-                    _buildModuleSection(
-                      moduleName: 'MODULE 1 — BASIC DATA STRUCTURES & ASYMPTOTIC NOTATIONS',
-                      questions: [widget.questions[0]],
-                      startIndex: 0,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildModuleSection(
-                      moduleName: 'MODULE 2 — GRAPH ALGORITHMS & SHORTEST PATHS',
-                      questions: [widget.questions[1]],
-                      startIndex: 1,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildModuleSection(
-                      moduleName: 'MODULE 3 — DIVIDE & CONQUER & RECURRENCES',
-                      questions: [widget.questions[2]],
-                      startIndex: 2,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildModuleSection(
-                      moduleName: 'MODULE 4 — ADVANCED SORTING & PARTITIONING',
-                      questions: [widget.questions[3]],
-                      startIndex: 3,
-                    ),
+                    if (widget.questions.isNotEmpty)
+                      _buildModuleSection(
+                        moduleName: 'ALL QUESTIONS',
+                        questions: widget.questions,
+                        startIndex: 0,
+                      ),
 
                     const SizedBox(height: 24),
                     Center(
@@ -339,7 +346,7 @@ class _FullQuestionPaperModalState extends State<FullQuestionPaperModal> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      'Q.${q.questionNumber}',
+                      q.label,
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,

@@ -147,7 +147,7 @@ export const UnsealedPaperView: React.FC<UnsealedPaperViewProps> = ({
         {/* Paper Header */}
         <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '20px', marginBottom: '24px', position: 'relative', zIndex: 1 }}>
           <div style={{ fontSize: '0.9rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#475569', fontFamily: 'sans-serif' }}>
-            NEXAI AUTONOMOUS UNIVERSITY OF TECHNOLOGY
+            MALNAD COLLEGE OF ENGINEERING
           </div>
           <h1 style={{ margin: '8px 0', fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>
             END SEMESTER EXAMINATIONS — {paper.examSession.toUpperCase()}
@@ -200,7 +200,7 @@ export const UnsealedPaperView: React.FC<UnsealedPaperViewProps> = ({
                   {secQuestions.map(q => (
                     <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', fontSize: '0.95rem', lineHeight: 1.6 }}>
                       <div style={{ display: 'flex', gap: '12px' }}>
-                        <span style={{ fontWeight: 800, minWidth: '24px' }}>{q.number}.</span>
+                        <span style={{ fontWeight: 800, minWidth: '24px' }}>{q.number}{q.part ? q.part : ''}.</span>
                         <span>{q.text}</span>
                       </div>
                       <div style={{ fontWeight: 800, fontFamily: 'sans-serif', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>

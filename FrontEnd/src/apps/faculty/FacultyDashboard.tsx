@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { api } from '@/services/api';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import {
@@ -15,15 +16,12 @@ import {
 import {
   INITIAL_ASSIGNED_COURSES,
   INITIAL_STUDENT_ROSTER,
-  INITIAL_FACULTY_CIE_PAPERS,
-  INITIAL_DAILY_ATTENDANCE_LOGS,
   INITIAL_CIE_SCANNED_SCRIPTS,
 } from './mockData';
 import {
   AssignedCourse,
   StudentGradeRecord,
   FacultyCIEPaper,
-  DailyAttendanceRecord,
   CIEScannedScript,
 } from './types';
 import toast from 'react-hot-toast';
@@ -34,7 +32,7 @@ import { StudentRosterMarksTab } from './features/students/StudentRosterMarksTab
 import { CIEQuestionPapersTab } from './features/cieQuestionPapers/CIEQuestionPapersTab';
 import { CreateCIEPaperModal } from './features/cieQuestionPapers/components/CreateCIEPaperModal';
 import { CIEEvaluationTab } from './features/cieEvaluation/CIEEvaluationTab';
-import { SEEValuationGateTab } from './features/seeValuation/SEEValuationGateTab';
+import { SEESubmissionsTab } from './features/seeValuation/SEESubmissionsTab';
 import { HODPaperAuditBanner } from './components/HODPaperAuditBanner';
 import { FacultyVectorBackground } from './components/FacultyVectorBackground';
 
@@ -47,13 +45,11 @@ export default function FacultyDashboard() {
 
   // Tab & Dataset State
   const [activeTab, setActiveTab] = useState<FacultyTab>('COURSES');
-  const [courses] = useState<AssignedCourse[]>(INITIAL_ASSIGNED_COURSES);
+  const [courses, setCourses] = useState<AssignedCourse[]>(INITIAL_ASSIGNED_COURSES);
   const [selectedCourseCode, setSelectedCourseCode] = useState<string>('CS201');
   const [students, setStudents] = useState<StudentGradeRecord[]>(INITIAL_STUDENT_ROSTER);
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Daily Attendance History
-  const [attendanceHistory, setAttendanceHistory] = useState<DailyAttendanceRecord[]>(INITIAL_DAILY_ATTENDANCE_LOGS);
 
   // CIE Scanned Answer Scripts for Correction Studio
   const [scannedScripts, setScannedScripts] = useState<CIEScannedScript[]>(INITIAL_CIE_SCANNED_SCRIPTS);
@@ -61,18 +57,18 @@ export default function FacultyDashboard() {
   // CIE Question Papers with localStorage sync across HOD and Faculty portals
   const [ciePapers, setCIEPapers] = useState<FacultyCIEPaper[]>(() => {
     try {
-      const saved = localStorage.getItem('nexai_cie_papers');
-      return saved ? JSON.parse(saved) : INITIAL_FACULTY_CIE_PAPERS;
+      const saved = localStorage.getItem('nexai_cie_papers_v2');
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_FACULTY_CIE_PAPERS;
+      return [];
     }
   });
 
   const saveCIEPapers = (papers: FacultyCIEPaper[]) => {
     setCIEPapers(papers);
     try {
-      localStorage.setItem('nexai_cie_papers', JSON.stringify(papers));
-      window.dispatchEvent(new Event('nexai_cie_papers_updated'));
+      localStorage.setItem('nexai_cie_papers_v2', JSON.stringify(papers));
+      window.dispatchEvent(new Event('nexai_cie_papers_v2_updated'));
     } catch (e) {
       console.error(e);
     }
@@ -81,39 +77,284 @@ export default function FacultyDashboard() {
   useEffect(() => {
     const handleSync = () => {
       try {
-        const saved = localStorage.getItem('nexai_cie_papers');
+        const saved = localStorage.getItem('nexai_cie_papers_v2');
         if (saved) setCIEPapers(JSON.parse(saved));
       } catch (e) {
         console.error(e);
       }
     };
-    window.addEventListener('nexai_cie_papers_updated', handleSync);
+    window.addEventListener('nexai_cie_papers_v2_updated', handleSync);
     window.addEventListener('storage', handleSync);
     return () => {
-      window.removeEventListener('nexai_cie_papers_updated', handleSync);
+      window.removeEventListener('nexai_cie_papers_v2_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
   }, []);
 
-  // SEE Valuation Gate State
-  const [inputSessionKey, setInputSessionKey] = useState('');
-  const [isValidatingKey, setIsValidatingKey] = useState(false);
+  // Cleanup: remove localStorage drafts whose CIE config was deleted from backend
+  // Runs on mount, on tab focus, and every 30s to catch mid-session deletions
+  useEffect(() => {
+    const cleanupStaleDrafts = async () => {
+      try {
+        const saved = localStorage.getItem('nexai_cie_papers_v2');
+        if (!saved) return;
+        const papers: FacultyCIEPaper[] = JSON.parse(saved);
+        if (papers.length === 0) return;
+
+        const subjectRes = await api.get('/scheduling/subjects/');
+        const subjects = subjectRes.data.results || subjectRes.data;
+
+        const configRes = await api.get('/cie/configs/');
+        const configs = configRes.data.results || configRes.data;
+
+        const cieNumMap: Record<string, string> = { 'CIE-1': 'CIE_1', 'CIE-2': 'CIE_2', 'CIE-3': 'CIE_3' };
+        const validCombos = new Set(
+          (Array.isArray(configs) ? configs : []).map((c: any) => {
+            const subj = (Array.isArray(subjects) ? subjects : []).find((s: any) => s.id === c.subject);
+            return `${subj?.code}+${cieNumMap[c.cie_number] || c.cie_number}`;
+          })
+        );
+
+        const clean = papers.filter(p => validCombos.has(`${p.courseCode}+${p.testType}`));
+
+        if (clean.length !== papers.length) {
+          localStorage.setItem('nexai_cie_papers_v2', JSON.stringify(clean));
+          setCIEPapers(clean);
+        }
+      } catch (e) {
+        // If API fails, keep existing drafts
+      }
+    };
+
+    // Run on mount
+    cleanupStaleDrafts();
+
+    // Run when tab becomes visible (user switches back)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') cleanupStaleDrafts();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Run every 30s as safety net
+    const interval = setInterval(cleanupStaleDrafts, 30000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchAssignedCourses = async () => {
+      try {
+        const response = await api.get('/scheduling/subjects/');
+        const subjects = response.data;
+        // The API might return pagination or an array directly
+        const results = Array.isArray(subjects) ? subjects : (subjects.results || []);
+        
+        // Filter by the logged-in user's ID
+        const mySubjects = results.filter((s: any) => s.coordinator === user?.id);
+        
+        if (mySubjects.length > 0) {
+          const assignedCourses: AssignedCourse[] = mySubjects.map((s: any) => ({
+            id: s.id,
+            code: s.code,
+            title: s.name,
+            department: s.department_code || 'CS',
+            semester: `Semester ${s.semester}`,
+            credits: s.credits,
+            totalEnrolled: s.enrolled_students || 0,
+            avgAttendance: 0,
+            syllabusCompletion: 0,
+            cie1Status: 'DRAFT',
+          }));
+          setCourses(assignedCourses);
+          setSelectedCourseCode(assignedCourses[0].code);
+        } else {
+          // If no courses assigned, keep mock data or empty. Let's keep mock for UI dev if empty, or just empty.
+          // Wait, user said "not at all random course. i want real course". So empty is fine if none assigned.
+          setCourses([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch assigned courses:', error);
+      }
+    };
+    
+    if (user?.id) {
+      fetchAssignedCourses();
+    }
+  }, [user]);
+  const [activeExamSessionId, setActiveExamSessionId] = useState<string | null>(null);
+
+  // Fetch students when active course changes
+  useEffect(() => {
+    const fetchEnrolledStudents = async () => {
+      const course = courses.find(c => c.code === selectedCourseCode);
+      if (!course || !course.id) return;
+      try {
+        const response = await api.get(`/scheduling/subjects/${course.id}/enrolled-students/`);
+        let enrollmentData: any = response.data;
+        let results = Array.isArray(enrollmentData) ? enrollmentData : (enrollmentData.results || []);
+        // Follow pagination so students past page 1 are never silently dropped.
+        let nextUrl = Array.isArray(enrollmentData) ? null : enrollmentData.next;
+        let guard = 0;
+        while (nextUrl && guard < 50) {
+          guard += 1;
+          const page: any = (await api.get(nextUrl)).data;
+          results = results.concat(Array.isArray(page) ? page : (page.results || []));
+          nextUrl = Array.isArray(page) ? null : page.next;
+        }
+        
+        // Capture the exam_session_id from the first enrollment
+        if (results.length > 0 && results[0].exam_session) {
+          setActiveExamSessionId(results[0].exam_session);
+        }
+
+        if (results.length > 0) {
+          const mappedStudents: StudentGradeRecord[] = results.map((enroll: any) => {
+            // Show 0 for null/unentered marks, preserve explicit values
+            const cie1 = enroll.cie1 !== null && enroll.cie1 !== undefined ? enroll.cie1 : 0;
+            const cie2 = enroll.cie2 !== null && enroll.cie2 !== undefined ? enroll.cie2 : 0;
+            const cie3 = enroll.cie3 !== null && enroll.cie3 !== undefined ? enroll.cie3 : 0;
+            const labOrProject = enroll.labOrProject !== null && enroll.labOrProject !== undefined ? enroll.labOrProject : 0;
+          
+          const toNum = (v: any) => {
+            if (v === '' || v === null || v === undefined) return 0;
+            const n = Number(v);
+            return isNaN(n) ? 0 : n;
+          };
+
+          return {
+            id: enroll.id || enroll.student,
+            courseCode: course.code,
+            usn: enroll.student_usn,
+            name: enroll.student_name,
+            attendancePercent: enroll.attendance_percentage !== null && enroll.attendance_percentage !== undefined ? enroll.attendance_percentage : '',
+            cie1,
+            cie2,
+            cie3,
+            labOrProject,
+            totalCIE: toNum(cie1) + toNum(cie2) + toNum(cie3) + toNum(labOrProject),
+            isModified: false,
+            saveStatus: 'SYNCED' as const,
+          };
+          });
+          
+          setStudents(mappedStudents);
+        } else {
+          setStudents([]); // or leave mock data
+        }
+      } catch (error) {
+        console.error('Failed to fetch enrolled students:', error);
+      }
+    };
+    
+    fetchEnrolledStudents();
+  }, [selectedCourseCode, courses]);
+
+  // Fetch Submissions when in CIE_EVALUATION tab
+  useEffect(() => {
+    const fetchSubmissions = async () => {
+      const course = courses.find(c => c.code === selectedCourseCode);
+      if (!course || !course.id) return;
+      try {
+        const configResp = await api.get(`/cie/configs/?subject=${course.id}`);
+        const configs = Array.isArray(configResp.data) ? configResp.data : configResp.data.results || [];
+
+        if (configs.length > 0) {
+          let allScripts: CIEScannedScript[] = [];
+          for (const config of configs) {
+            const subResp = await api.get(`/cie/test/submissions/?cie_config=${config.id}`);
+            const submissions = subResp.data.submissions || [];
+            
+            const mappedScripts: CIEScannedScript[] = submissions.map((sub: any) => {
+              const evaluatorTotal = sub.answers.reduce((acc: number, ans: any) => acc + (ans.marks_awarded || 0), 0);
+              const isEvaluated = sub.answers.length > 0 && sub.answers.every((ans: any) => ans.marks_awarded !== null);
+              const isNotSubmitted = sub.submission_status === 'NOT_ATTENDED' || sub.submission_status === 'NOT_SUBMITTED';
+
+              let statusText: 'PENDING_VALUATION' | 'EVALUATED' | 'NOT_SUBMITTED' = 'PENDING_VALUATION';
+              if (isNotSubmitted) statusText = 'NOT_SUBMITTED';
+              else if (isEvaluated) statusText = 'EVALUATED';
+
+              return {
+                id: sub.attempt_id,
+                studentId: sub.attempt_id,
+                studentUSN: sub.student_usn,
+                studentName: sub.student_name,
+                courseCode: course.code,
+                courseTitle: course.title,
+                testType: (config.cie_number || 'CIE-1').replace('_', '-'),
+                submittedAt: new Date(sub.submitted_at).toLocaleString(),
+                totalPages: sub.answers.length,
+                status: statusText,
+                maxMarks: sub.answers.length * 10, // Tally maximum marks of combined questions
+                evaluatorTotalMarks: isEvaluated ? evaluatorTotal : undefined,
+                questions: sub.answers.map((ans: any, idx: number) => ({
+                  id: ans.answer_id,
+                  questionNumber: String(idx + 1),
+                  questionText: ans.question_text,
+                  answerText: ans.answer_text,
+                  answerImageBase64: ans.answer_image_base64,
+                  extractedText: ans.extracted_text,
+                  maxMarks: 10,
+                  bloomsLevel: 'L2',
+                  co: 'CO1',
+                  awardedMarks: ans.marks_awarded || 0,
+                  isEvaluated: ans.marks_awarded !== null,
+                })),
+                annotations: [],
+              };
+            });
+            allScripts = [...allScripts, ...mappedScripts];
+          }
+          setScannedScripts(allScripts);
+        } else {
+          setScannedScripts([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch submissions:', error);
+      }
+    };
+    
+    if (activeTab === 'CIE_EVALUATION') {
+      fetchSubmissions();
+    }
+  }, [selectedCourseCode, courses, activeTab]);
 
   // Modal State for CIE Paper Creator
   const [isCreatePaperOpen, setIsCreatePaperOpen] = useState(false);
+  const [editingPaper, setEditingPaper] = useState<FacultyCIEPaper | null>(null);
+
+  const handleOpenCreatePaper = () => {
+    setEditingPaper(null);
+    setIsCreatePaperOpen(true);
+  };
+
+  const handleEditRejectedPaper = (paperId: string) => {
+    const target = ciePapers.find(p => p.id === paperId);
+    if (!target) return;
+    setEditingPaper(target);
+    setIsCreatePaperOpen(true);
+  };
 
   // Handlers for Student Marks & Attendance
   const handleStudentFieldChange = (
     id: string,
-    field: 'attendancePercent' | 'cie1' | 'cie2' | 'labOrQuiz',
-    value: number
+    field: 'attendancePercent' | 'cie1' | 'cie2' | 'cie3' | 'labOrProject',
+    value: number | string
   ) => {
     setStudents(prev =>
       prev.map(s => {
         if (s.id === id) {
-          const updated = { ...s, [field]: value, isModified: true };
-          const bestCie = Math.max(updated.cie1 || 0, updated.cie2 || 0);
-          updated.totalCIE = bestCie + (updated.labOrQuiz || 0);
+          const updated = { ...s, [field]: value, isModified: true, saveStatus: 'UNSAVED' as const };
+
+          // Total = sum of non-empty numeric values (null/empty = 0 for display only)
+          const toNum = (v: number | string) => {
+            if (v === '' || v === null || v === undefined) return 0;
+            const n = Number(v);
+            return isNaN(n) ? 0 : n;
+          };
+          updated.totalCIE = toNum(updated.cie1) + toNum(updated.cie2) + toNum(updated.cie3) + toNum(updated.labOrProject);
           return updated;
         }
         return s;
@@ -121,96 +362,81 @@ export default function FacultyDashboard() {
     );
   };
 
-  // Handler: Commit Daily Attendance Session
-  const handleCommitDailyAttendance = (
-    courseCode: string,
-    sessionDate: string,
-    sessionTopic: string,
-    absentUsns: string[]
-  ) => {
-    const absentSet = new Set(absentUsns);
-    const courseStudents = students.filter(s => s.courseCode === courseCode);
+  // Removed Daily Attendance Logic
 
-    // Update students cumulative attendance
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.courseCode === courseCode) {
-          const isAbsent = absentSet.has(s.usn);
-          const newHeld = s.classesHeld + 1;
-          const newAttended = isAbsent ? s.classesAttended : s.classesAttended + 1;
-          const newPct = Math.round((newAttended / newHeld) * 100);
+  // Handler: Submit Paper Draft to HOD via API
+  const handleSubmitDraftToHOD = async (paper: FacultyCIEPaper) => {
+    try {
+      const cieNumMap: Record<string, string> = { 'CIE-1': 'CIE_1', 'CIE-2': 'CIE_2', 'CIE-3': 'CIE_3' };
+      const cieNumber = cieNumMap[paper.testType] || 'CIE_1';
 
-          return {
-            ...s,
-            classesHeld: newHeld,
-            classesAttended: newAttended,
-            attendancePercent: newPct,
-            isModified: true,
-          };
-        }
-        return s;
-      })
-    );
+      // Find subject from already-loaded courses
+      const courseObj = courses.find(c => c.code === paper.courseCode);
+      if (!courseObj?.id) {
+        toast.error('Subject not found.');
+        return;
+      }
 
-    // Log the session record
-    const newLog: DailyAttendanceRecord = {
-      id: `att-log-${Date.now()}`,
-      courseCode,
-      date: sessionDate,
-      sessionNumber: (attendanceHistory.filter(h => h.courseCode === courseCode).length || 0) + 40,
-      sessionTopic: sessionTopic || `Lecture Session on ${sessionDate}`,
-      totalStudents: courseStudents.length,
-      presentCount: courseStudents.length - absentUsns.length,
-      absentCount: absentUsns.length,
-      absentUSNs: absentUsns,
-      recordedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+      // Find active CIE config for this subject + CIE number
+      const configRes = await api.get('/cie/configs/', { params: { subject: courseObj.id, cie_number: cieNumber } });
+      const configs = configRes.data.results || configRes.data;
+      const config = Array.isArray(configs) ? configs[0] : null;
+      if (!config) {
+        toast.error(`No CIE configuration found for ${paper.courseCode} ${paper.testType}. Ask HOD to create one first.`);
+        return;
+      }
 
-    setAttendanceHistory(prev => [newLog, ...prev]);
+      const paperContent = paper.questions.map(q =>
+        `${q.qNumber}) [${q.marks}M] [${q.co}] [${q.bloomsLevel}]\n${q.text}`
+      ).join('\n\n');
+      const answerKey = paper.questions.map(q =>
+        `${q.qNumber}) ${q.answer}`
+      ).join('\n\n');
+
+      await api.post('/cie/scrutiny/', {
+        cie_config: config.id,
+        paper_title: `${paper.courseCode} - ${paper.testType} Question Paper`,
+        paper_content: paperContent,
+        answer_key: answerKey,
+      });
+
+      saveCIEPapers([{ ...paper, status: 'SUBMITTED_TO_HOD' }, ...ciePapers]);
+      setIsCreatePaperOpen(false);
+      setEditingPaper(null);
+      toast.success('CIE Paper submitted to HOD successfully');
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to submit paper';
+      toast.error(msg);
+    }
   };
 
-  // Handler: Submit Paper Draft to HOD
-  const handleSubmitDraftToHOD = (newPaper: FacultyCIEPaper) => {
-    saveCIEPapers([newPaper, ...ciePapers]);
-    setIsCreatePaperOpen(false);
-    toast.success(`Paper for ${newPaper.courseCode} (${newPaper.testType}) submitted to HOD for verification!`);
-  };
-
-  // Handler: Resubmit Paper for Re-Audit after revising
-  const handleResubmitForReaudit = (paperId: string) => {
-    const target = ciePapers.find(p => p.id === paperId);
-    if (!target) return;
-
-    const updated = ciePapers.map(p =>
-      p.id === paperId
-        ? {
-            ...p,
-            status: 'SUBMITTED_TO_HOD' as const,
-            submittedAt: `${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (Resubmitted for Re-Audit)`,
-          }
-        : p
-    );
-
-    saveCIEPapers(updated);
-    toast.success(`Question paper for ${target.courseCode} (${target.testType}) resubmitted to HOD for Re-Audit!`, {
-      icon: '🔄',
-      duration: 4000,
-    });
+  const handleDeleteCIEPaper = (paperId: string) => {
+    saveCIEPapers(ciePapers.filter(p => p.id !== paperId));
+    toast.success('Draft paper deleted successfully');
   };
 
   // Handler: Script Evaluation Complete (Automatically syncs to Student Roster!)
-  const handleValuationComplete = (
+  const handleScriptEvaluationComplete = (
     awardedTotal: number,
-    studentId: string,
-    testType: 'CIE-1' | 'CIE-2'
+    studentUSN: string,
+    testType: 'CIE-1' | 'CIE-2',
+    maxMarks: number
   ) => {
     setStudents(prev =>
       prev.map(s => {
-        if (s.id === studentId) {
+        if (s.usn === studentUSN) {
           const field = testType === 'CIE-1' ? 'cie1' : 'cie2';
-          const updated = { ...s, [field]: awardedTotal, isModified: true };
-          const bestCie = Math.max(updated.cie1 || 0, updated.cie2 || 0);
-          updated.totalCIE = bestCie + (updated.labOrQuiz || 0);
+          
+          // Auto scale the awarded marks to out of 10
+          const scaledScore = Math.ceil((awardedTotal / (maxMarks || 20)) * 10);
+          const updated = { ...s, [field]: scaledScore, isModified: true, saveStatus: 'UNSAVED' as const };
+          
+          const toNum = (v: number | string) => {
+            if (v === '' || v === null || v === undefined) return 0;
+            const n = Number(v);
+            return isNaN(n) ? 0 : n;
+          };
+          updated.totalCIE = toNum(updated.cie1) + toNum(updated.cie2) + toNum(updated.cie3) + toNum(updated.labOrProject);
           return updated;
         }
         return s;
@@ -222,36 +448,34 @@ export default function FacultyDashboard() {
     setScannedScripts(prev => prev.map(s => (s.id === updatedScript.id ? updatedScript : s)));
   };
 
-  const handleSaveMarksToHOD = () => {
-    setStudents(prev => prev.map(s => ({ ...s, isModified: false })));
-    toast.success(`Marks & Attendance for ${selectedCourseCode} synchronized and submitted to HOD!`);
-  };
+  const handleSaveMarksToHOD = async () => {
+    if (saving) return;
+    setSaving(true);
 
-  // Handler: Validate SEE Session Key & Transition to Evaluator Studio
-  const handleValidateSessionKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanKey = inputSessionKey.trim().toUpperCase();
+    // Mark all students as SAVING
+    setStudents(prev => prev.map(s => s.isModified ? { ...s, saveStatus: 'SAVING' as const } : s));
 
-    if (!cleanKey) {
-      toast.error('Please enter a valid CoE Evaluation Session Key.');
-      return;
+    try {
+      await api.post('/eligibility/sync-marks/', {
+        subject_code: selectedCourseCode,
+        exam_session_id: activeExamSessionId,
+        students: students
+      });
+      // On success: mark all as SYNCED
+      setStudents(prev => prev.map(s => ({ ...s, isModified: false, saveStatus: 'SYNCED' as const })));
+      toast.success(`Marks & Attendance for ${selectedCourseCode} synchronized and submitted to HOD!`);
+    } catch (err) {
+      // On failure: mark unsaved ones as FAILED
+      setStudents(prev => prev.map(s => s.saveStatus === 'SAVING' ? { ...s, saveStatus: 'FAILED' as const } : s));
+      toast.error('Failed to sync marks to HOD');
+      console.error(err);
+    } finally {
+      setSaving(false);
     }
-
-    setIsValidatingKey(true);
-
-    setTimeout(() => {
-      setIsValidatingKey(false);
-      if (cleanKey.includes('EVAL') || cleanKey.length >= 8) {
-        toast.success('Session key verified! Launching Digital Evaluation Studio...');
-        navigate(`/evaluator?sessionKey=${cleanKey}&subject=${selectedCourseCode}&evaluator=${encodeURIComponent(user?.full_name || 'Faculty Evaluator')}`);
-      } else {
-        toast.error('Invalid or expired Session Key. Please check the key issued by CoE.');
-      }
-    }, 600);
   };
 
   const belowAttendanceCount = students.filter(
-    s => s.courseCode === selectedCourseCode && s.attendancePercent < 75
+    s => s.courseCode === selectedCourseCode && s.attendancePercent !== '' && s.attendancePercent !== null && s.attendancePercent !== undefined && Number(s.attendancePercent) < 85
   ).length;
 
   const pendingScriptsCount = scannedScripts.filter(
@@ -335,7 +559,7 @@ export default function FacultyDashboard() {
     },
     {
       id: 'SEE_VALUATION',
-      label: 'SEE Evaluator Studio',
+      label: 'SEE Valuation Studio',
       icon: <KeyRound size={20} />,
       badge: (
         <span style={{
@@ -346,7 +570,7 @@ export default function FacultyDashboard() {
           fontSize: '0.68rem',
           fontWeight: 800
         }}>
-          OTP
+          LIVE
         </span>
       )
     },
@@ -367,22 +591,33 @@ export default function FacultyDashboard() {
       action: (
         <button
           onClick={handleSaveMarksToHOD}
+          disabled={saving}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
+            background: saving ? '#94A3B8' : 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
             color: 'white',
             border: 'none',
             padding: '10px 20px',
             borderRadius: '10px',
             fontWeight: 800,
             fontSize: '0.85rem',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(22,163,74,0.3)',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            boxShadow: saving ? 'none' : '0 4px 12px rgba(22,163,74,0.3)',
+            opacity: saving ? 0.7 : 1,
           }}
         >
-          <Save size={16} /> Save & Submit Marks to HOD
+          {saving ? (
+            <>
+              <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save size={16} /> Save & Submit Marks to HOD
+            </>
+          )}
         </button>
       )
     },
@@ -420,8 +655,8 @@ export default function FacultyDashboard() {
       accentColor: '#2563EB',
     },
     SEE_VALUATION: {
-      title: 'Semester End Examination (SEE) Valuation Studio Gate',
-      subtitle: 'Cryptographic single-session OTP key gateway for autonomous digital answer script evaluation.',
+      title: 'SEE Valuation — Submissions & Distribution',
+      subtitle: 'View submitted digital SEE answer scripts (handwriting + OCR), award marks, and distribute valuation to evaluators.',
       icon: <KeyRound size={26} />,
       accentColor: '#059669',
     },
@@ -441,6 +676,7 @@ export default function FacultyDashboard() {
     >
       <div style={{ position: 'relative', overflow: 'hidden' }}>
         <FacultyVectorBackground />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
         <div style={{ position: 'relative', zIndex: 1 }}>
           <PageHeader
@@ -472,18 +708,17 @@ export default function FacultyDashboard() {
             />
           )}
 
-          {/* ══════════════ TAB 2: STUDENT ROSTER & DAILY ATTENDANCE ══════════════ */}
+          {/* ══════════════ TAB 2: ATTENDANCE & CIE MARKS ══════════════ */}
           {activeTab === 'STUDENTS' && (
             <StudentRosterMarksTab
               courses={courses}
               selectedCourseCode={selectedCourseCode}
               onSelectCourseCode={setSelectedCourseCode}
               students={students}
+              setStudents={setStudents}
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
               onStudentFieldChange={handleStudentFieldChange}
-              onCommitDailyAttendance={handleCommitDailyAttendance}
-              attendanceHistory={attendanceHistory}
               onSaveMarksToHOD={handleSaveMarksToHOD}
             />
           )}
@@ -491,9 +726,13 @@ export default function FacultyDashboard() {
           {/* ══════════════ TAB 3: CIE QUESTION PAPERS ══════════════ */}
           {activeTab === 'CIE_PAPERS' && (
             <CIEQuestionPapersTab
-              ciePapers={ciePapers}
-              onOpenCreatePaperModal={() => setIsCreatePaperOpen(true)}
-              onResubmitForReaudit={handleResubmitForReaudit}
+              courses={courses}
+              selectedCourseCode={selectedCourseCode}
+              onSelectCourseCode={setSelectedCourseCode}
+              ciePapers={ciePapers.filter(p => p.courseCode === selectedCourseCode)}
+              onOpenCreatePaperModal={handleOpenCreatePaper}
+              onResubmitForReaudit={handleEditRejectedPaper}
+              onDeletePaper={handleDeleteCIEPaper}
             />
           )}
 
@@ -505,18 +744,31 @@ export default function FacultyDashboard() {
               onSelectCourseCode={setSelectedCourseCode}
               scripts={scannedScripts}
               onUpdateScript={handleUpdateScript}
-              onValuationComplete={handleValuationComplete}
+              onValuationComplete={handleScriptEvaluationComplete}
             />
           )}
 
-          {/* ══════════════ TAB 5: SEE VALUATION GATE ══════════════ */}
+          {/* ══════════════ TAB 5: SEE VALUATION (submissions & distribution) ══════════════ */}
           {activeTab === 'SEE_VALUATION' && (
-            <SEEValuationGateTab
+            <SEESubmissionsTab
+              courses={courses}
               selectedCourseCode={selectedCourseCode}
-              inputSessionKey={inputSessionKey}
-              isValidatingKey={isValidatingKey}
-              onInputSessionKeyChange={setInputSessionKey}
-              onValidateSessionKey={handleValidateSessionKey}
+              onSelectCourseCode={setSelectedCourseCode}
+              examSessionId={activeExamSessionId}
+              onRedeemSuccess={({ id, name, subject_code, subject_id, exam_session_name, evaluator_name, access_code, exam_session }) => {
+                // Redirect to /evaluator with bundle info as query params
+                const params = new URLSearchParams({
+                  bundleId: id,
+                  bundleName: name,
+                  subjectCode: subject_code,
+                  subjectId: subject_id,
+                  examSessionName: exam_session_name,
+                  examSessionId: exam_session || '',
+                  evaluatorName: evaluator_name || '',
+                  accessCode: access_code || '',
+                });
+                navigate(`/evaluator?${params.toString()}`);
+              }}
             />
           )}
         </div>
@@ -527,8 +779,12 @@ export default function FacultyDashboard() {
         isOpen={isCreatePaperOpen}
         selectedCourseCode={selectedCourseCode}
         courses={courses}
-        onClose={() => setIsCreatePaperOpen(false)}
+        onClose={() => {
+          setIsCreatePaperOpen(false);
+          setEditingPaper(null);
+        }}
         onSubmitPaper={handleSubmitDraftToHOD}
+        initialPaper={editingPaper || undefined}
       />
     </MainLayout>
   );
